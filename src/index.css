@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-luxury {
+    font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(107, 142, 123, 0.35);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 142, 123, 0.6);
+  }
+
+  /* Sage Serenity glass and glow utilities */
+  .sage-glass {
+    background: rgba(36, 59, 53, 0.85);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(183, 201, 177, 0.25);
+  }
+
+  .sage-glass-light {
+    background: rgba(241, 233, 210, 0.85);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(107, 142, 123, 0.3);
+  }
+
+  .sage-card {
+    background: linear-gradient(145deg, rgba(36, 59, 53, 0.9) 0%, rgba(26, 44, 39, 0.95) 100%);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(183, 201, 177, 0.2);
+  }
+
+  .sage-card-light {
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(241, 233, 210, 0.7) 100%);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(107, 142, 123, 0.35);
+  }
+
+  .sage-composer-glow {
+    box-shadow: 0 10px 32px rgba(18, 30, 27, 0.45), 0 0 20px rgba(107, 142, 123, 0.15);
+  }
+
+  .sage-glow-subtle {
+    box-shadow: 0 0 16px rgba(183, 201, 177, 0.18);
+  }
+}
+
+.markdown-content p {
+  line-height: 1.72;
+}
+
+.markdown-content pre {
+  margin: 0;
+}
+
+/* Ensure smooth text rendering */
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
