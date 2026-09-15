@@ -840,4 +840,18 @@ export default function App() {
           setIsSettingsOpen(false)
         }
         settings={settings}
-        onUpdateS
+        
+              onUpdateSettings={
+          handleUpdateSettings
+        }
+        health={health}
+        onClearAllConversations={
+          handleClearAll
+        }
+        onResetAllData={
+          handleResetAllData
+        }
+      />
+    </div>
+  );
+}
