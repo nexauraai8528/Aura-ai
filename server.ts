@@ -16,7 +16,8 @@ if (
 }
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+
+const PORT = Number(process.env.PORT) || 10000;
 
 app.use(express.json({ limit: '25mb' }));
 
@@ -190,6 +191,14 @@ app.get('/api/health', (req: Request, res: Response) => {
     activeModel: candidates[0] || configured,
     isRateLimited: isModelInCooldown(configured),
     hasApiKey: hasKey,
+    port: PORT,
+  });
+});
+
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    appName: 'Aura AI',
   });
 });
 
@@ -254,7 +263,7 @@ app.post('/api/chat/title', async (req: Request, res: Response) => {
 function extractCleanErrorMessage(err: any): string {
   if (!err) return 'An unexpected error occurred.';
 
-  let msg =
+  const msg =
     typeof err === 'string'
       ? err
       : err.message || String(err);
@@ -546,11 +555,23 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(
-      `Aura AI server running on http://0.0.0.0:${PORT}`
-    );
-  });
+  const server = app.listen(
+    PORT,
+    '0.0.0.0',
+    () => {
+      console.log(
+        `Aura AI server running on http://0.0.0.0:${PORT}`
+      );
+      console.log(
+        `Render PORT environment variable: ${
+          process.env.PORT || 'not set'
+        }`
+      );
+    }
+  );
+
+  server.keepAliveTimeout = 120000;
+  server.headersTimeout = 120000;
 }
 
 startServer();
