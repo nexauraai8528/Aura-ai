@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import {
   Conversation,
   Message,
@@ -17,18 +22,20 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { SettingsModal } from './components/SettingsModal';
 
 export default function App() {
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    storage.getConversations()
+  const [conversations, setConversations] = useState<Conversation[]>(
+    () => storage.getConversations()
   );
 
-  const [activeId, setActiveId] = useState<string | null>(() =>
-    storage.getCurrentConversationId()
+  const [activeId, setActiveId] = useState<string | null>(
+    () => storage.getCurrentConversationId()
   );
 
-  const [theme, setTheme] = useState<ThemeMode>(() => storage.getTheme());
+  const [theme, setTheme] = useState<ThemeMode>(
+    () => storage.getTheme()
+  );
 
-  const [settings, setSettings] = useState<AppSettings>(() =>
-    storage.getSettings()
+  const [settings, setSettings] = useState<AppSettings>(
+    () => storage.getSettings()
   );
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -38,10 +45,9 @@ export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const abortControllerRef =
+    useRef<AbortController | null>(null);
 
-  // Sync theme with document
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -52,17 +58,14 @@ export default function App() {
     storage.setTheme(theme);
   }, [theme]);
 
-  // Persist conversations
   useEffect(() => {
     storage.saveConversations(conversations);
   }, [conversations]);
 
-  // Persist active conversation
   useEffect(() => {
     storage.setCurrentConversationId(activeId);
   }, [activeId]);
 
-  // Check Ahemad's AI server health
   useEffect(() => {
     async function checkHealth() {
       try {
@@ -74,7 +77,7 @@ export default function App() {
         }
       } catch (err) {
         console.warn(
-          "Could not connect to Ahemad's AI server health endpoint:",
+          "Could not connect to Ahemad's AI server:",
           err
         );
       }
@@ -83,27 +86,9 @@ export default function App() {
     checkHealth();
   }, []);
 
-  // Ctrl/Cmd + K = New Chat
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        handleNewChat();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
-  // Current conversation
   const currentConversation =
     conversations.find((c) => c.id === activeId) || null;
 
-  // Scroll to bottom
   const scrollToBottom = useCallback(
     (behavior: ScrollBehavior = 'smooth') => {
       if (messagesEndRef.current) {
@@ -117,20 +102,26 @@ export default function App() {
   );
 
   useEffect(() => {
-    scrollToBottom('smooth');
-  }, [currentConversation?.messages, scrollToBottom]);
+    if (settings.autoScroll !== false) {
+      scrollToBottom('smooth');
+    }
+  }, [
+    currentConversation?.messages,
+    scrollToBottom,
+    settings.autoScroll,
+  ]);
 
-  // Create new chat
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
+      abortControllerRef.current = null;
       setIsLoading(false);
     }
 
     const newConv: Conversation = {
       id: `conv-${Date.now()}-${Math.random()
         .toString(36)
-        .substr(2, 6)}`,
+        .slice(2, 8)}`,
       title: 'New Chat',
       messages: [],
       createdAt: Date.now(),
@@ -141,31 +132,52 @@ export default function App() {
     setConversations((prev) => [newConv, ...prev]);
     setActiveId(newConv.id);
     setSidebarOpen(false);
-  };
+    setInputDraft('');
+  }, [health, isLoading]);
 
-  // Toggle theme
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key.toLowerCase() === 'k'
+      ) {
+        e.preventDefault();
+        handleNewChat();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+    };
+  }, [handleNewChat]);
+
   const handleToggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) =>
+      prev === 'dark' ? 'light' : 'dark'
+    );
   };
 
-  // Save settings
-  const handleSaveSettings = (newSettings: AppSettings) => {
-    setSettings(newSettings);
-    storage.saveSettings(newSettings);
-  };
-
-  // Select assistant mode
-  const handleSelectMode = (newMode: AssistantMode) => {
+  const handleUpdateSettings = (
+    updates: Partial<AppSettings>
+  ) => {
     const updated = {
       ...settings,
-      defaultMode: newMode,
+      ...updates,
     };
 
     setSettings(updated);
     storage.saveSettings(updated);
+
+    if (updates.theme) {
+      setTheme(updates.theme);
+    }
   };
 
-  // Toggle pinned chat
   const handleTogglePin = (id: string) => {
     setConversations((prev) =>
       prev.map((c) =>
@@ -173,26 +185,31 @@ export default function App() {
           ? {
               ...c,
               isPinned: !c.isPinned,
+              updatedAt: Date.now(),
             }
           : c
       )
     );
   };
 
-  // Delete conversation
   const handleDeleteConversation = (id: string) => {
     setConversations((prev) => {
-      const remaining = prev.filter((c) => c.id !== id);
+      const remaining = prev.filter(
+        (c) => c.id !== id
+      );
 
       if (activeId === id) {
-        setActiveId(remaining.length > 0 ? remaining[0].id : null);
+        setActiveId(
+          remaining.length > 0
+            ? remaining[0].id
+            : null
+        );
       }
 
       return remaining;
     });
   };
 
-  // Rename conversation
   const handleRenameConversation = (
     id: string,
     newTitle: string
@@ -210,18 +227,42 @@ export default function App() {
     );
   };
 
-  // Clear all chats
   const handleClearAll = () => {
     if (isLoading && abortControllerRef.current) {
       abortControllerRef.current.abort();
-      setIsLoading(false);
+      abortControllerRef.current = null;
     }
+
+    setIsLoading(false);
+    setConversations([]);
+    setActiveId(null);
+    setInputDraft('');
+  };
+
+  const handleResetAllData = () => {
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    storage.clearAllData();
+
+    const defaultSettings: AppSettings = {
+      theme: 'dark',
+      enterToSend: true,
+      streamingEnabled: true,
+      autoScroll: true,
+      activeMode: 'general',
+    };
 
     setConversations([]);
     setActiveId(null);
+    setTheme('dark');
+    setSettings(defaultSettings);
+    setInputDraft('');
+    setIsLoading(false);
   };
 
-  // Stop AI generation
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -230,12 +271,17 @@ export default function App() {
 
     setIsLoading(false);
 
-    if (activeId) {
-      setConversations((prev) =>
-        prev.map((conv) => {
-          if (conv.id !== activeId) return conv;
+    if (!activeId) return;
 
-          const updatedMessages = conv.messages.map((m) => {
+    setConversations((prev) =>
+      prev.map((conv) => {
+        if (conv.id !== activeId) {
+          return conv;
+        }
+
+        return {
+          ...conv,
+          messages: conv.messages.map((m) => {
             if (
               m.status === 'streaming' ||
               m.status === 'sending'
@@ -247,18 +293,70 @@ export default function App() {
             }
 
             return m;
-          });
-
-          return {
-            ...conv,
-            messages: updatedMessages,
-          };
-        })
-      );
-    }
+          }),
+          updatedAt: Date.now(),
+        };
+      })
+    );
   };
 
-  // Send message
+  const handleRegenerate = async () => {
+    if (!currentConversation || isLoading) {
+      return;
+    }
+
+    const messages =
+      currentConversation.messages;
+
+    const lastAssistantIndex =
+      messages
+        .map((m) => m.role)
+        .lastIndexOf('assistant');
+
+    const lastUserIndex =
+      lastAssistantIndex > 0
+        ? lastAssistantIndex - 1
+        : messages.length - 1;
+
+    const lastUserMessage =
+      messages[lastUserIndex];
+
+    if (
+      !lastUserMessage ||
+      lastUserMessage.role !== 'user'
+    ) {
+      return;
+    }
+
+    setConversations((prev) =>
+      prev.map((conv) => {
+        if (conv.id !== currentConversation.id) {
+          return conv;
+        }
+
+        const filtered =
+          conv.messages.filter(
+            (m) => m.role !== 'assistant'
+          );
+
+        return {
+          ...conv,
+          messages: filtered,
+          updatedAt: Date.now(),
+        };
+      })
+    );
+
+    await handleSendMessage(
+      lastUserMessage.content,
+      lastUserMessage.attachments || []
+    );
+  };
+
+  const handleEditMessage = (content: string) => {
+    setInputDraft(content);
+  };
+
   const handleSendMessage = async (
     text: string,
     attachments: Attachment[] = []
@@ -266,12 +364,11 @@ export default function App() {
     let targetConvId = activeId;
     let isFirstMessage = false;
 
-    // Create conversation if none exists
     if (!targetConvId) {
       const newConv: Conversation = {
         id: `conv-${Date.now()}-${Math.random()
           .toString(36)
-          .substr(2, 6)}`,
+          .slice(2, 8)}`,
         title: text
           ? text.length > 28
             ? `${text.slice(0, 28)}...`
@@ -283,9 +380,12 @@ export default function App() {
         model: health?.model || 'internal-ai-engine',
       };
 
-      setConversations((prev) => [newConv, ...prev]);
-      setActiveId(newConv.id);
+      setConversations((prev) => [
+        newConv,
+        ...prev,
+      ]);
 
+      setActiveId(newConv.id);
       targetConvId = newConv.id;
       isFirstMessage = true;
     } else {
@@ -305,7 +405,9 @@ export default function App() {
       timestamp: Date.now(),
       status: 'complete',
       attachments:
-        attachments.length > 0 ? attachments : undefined,
+        attachments.length > 0
+          ? attachments
+          : undefined,
     };
 
     const assistantMessageId =
@@ -317,13 +419,14 @@ export default function App() {
       content: '',
       timestamp: Date.now(),
       status: 'sending',
-      mode: settings.defaultMode,
+      mode: settings.activeMode,
     };
 
-    // Add messages to conversation
     setConversations((prev) =>
       prev.map((conv) => {
-        if (conv.id !== targetConvId) return conv;
+        if (conv.id !== targetConvId) {
+          return conv;
+        }
 
         return {
           ...conv,
@@ -345,10 +448,12 @@ export default function App() {
 
     setIsLoading(true);
 
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    const abortController =
+      new AbortController();
 
-    // Generate smart title
+    abortControllerRef.current =
+      abortController;
+
     if (isFirstMessage && text) {
       fetch('/api/chat/title', {
         method: 'POST',
@@ -377,16 +482,10 @@ export default function App() {
             );
           }
         })
-        .catch((e) =>
-          console.warn(
-            "Could not auto-generate title:",
-            e
-          )
-        );
+        .catch(() => {});
     }
 
     try {
-      // Prepare conversation history
       const existingMessages =
         conversations.find(
           (c) => c.id === targetConvId
@@ -401,11 +500,12 @@ export default function App() {
             ? 'model'
             : 'user',
         text: m.content,
-        attachments: m.attachments?.map((a) => ({
-          data: a.data,
-          mimeType: a.mimeType,
-          name: a.name,
-        })),
+        attachments:
+          m.attachments?.map((a) => ({
+            data: a.data,
+            mimeType: a.mimeType,
+            name: a.name,
+          })),
       }));
 
       const response = await fetch(
@@ -417,16 +517,7 @@ export default function App() {
           },
           body: JSON.stringify({
             messages: historyToSend,
-            mode: settings.defaultMode,
-
-            // Send custom instructions using both names
-            // for compatibility with the backend.
-            systemInstruction:
-              settings.customInstructions,
-            customSystemInstruction:
-              settings.customInstructions,
-
-            creativity: settings.creativity,
+            mode: settings.activeMode,
           }),
           signal: abortController.signal,
         }
@@ -434,7 +525,7 @@ export default function App() {
 
       if (!response.ok) {
         throw new Error(
-          `Server returned error ${response.status}: ${response.statusText}`
+          `Server returned error ${response.status}`
         );
       }
 
@@ -444,13 +535,15 @@ export default function App() {
         );
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder('utf-8');
+      const reader =
+        response.body.getReader();
+
+      const decoder =
+        new TextDecoder('utf-8');
 
       let accumulatedText = '';
       let buffer = '';
 
-      // Read SSE stream
       while (true) {
         const { done, value } =
           await reader.read();
@@ -461,13 +554,18 @@ export default function App() {
           stream: true,
         });
 
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const lines =
+          buffer.split('\n');
+
+        buffer =
+          lines.pop() || '';
 
         for (const line of lines) {
           const trimmed = line.trim();
 
-          if (!trimmed.startsWith('data: ')) {
+          if (
+            !trimmed.startsWith('data: ')
+          ) {
             continue;
           }
 
@@ -485,64 +583,261 @@ export default function App() {
 
               setConversations((prev) =>
                 prev.map((conv) => {
-                  if (conv.id !== targetConvId) {
+                  if (
+                    conv.id !== targetConvId
+                  ) {
                     return conv;
                   }
 
-                  const updated = conv.messages.map(
-                    (m) => {
-                      if (
-                        m.id === assistantMessageId
-                      ) {
-                        return {
-                          ...m,
-                          content: accumulatedText,
-                          status:
-                            'streaming' as const,
-                        };
-                      }
-
-                      return m;
-                    }
-                  );
-
                   return {
                     ...conv,
-                    messages: updated,
+                    messages:
+                      conv.messages.map(
+                        (m) =>
+                          m.id ===
+                          assistantMessageId
+                            ? {
+                                ...m,
+                                content:
+                                  accumulatedText,
+                                status:
+                                  'streaming' as const,
+                              }
+                            : m
+                      ),
+                    updatedAt: Date.now(),
                   };
                 })
               );
             }
-          } catch (jsonErr: any) {
+          } catch (err: any) {
             if (
-              jsonErr.message &&
-              !jsonErr.message.includes('JSON')
+              err?.message &&
+              !err.message.includes('JSON')
             ) {
-              throw jsonErr;
+              throw err;
             }
           }
         }
       }
 
-      // Mark response complete
       setConversations((prev) =>
         prev.map((conv) => {
           if (conv.id !== targetConvId) {
             return conv;
           }
 
-          const updated = conv.messages.map((m) => {
-            if (m.id === assistantMessageId) {
-              return {
-                ...m,
-                content:
-                  accumulatedText ||
-                  'No response received.',
-                status: 'complete' as const,
-              };
+          return {
+            ...conv,
+            messages: conv.messages.map((m) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    content:
+                      accumulatedText ||
+                      'No response received.',
+                    status: 'complete' as const,
+                  }
+                : m
+            ),
+            updatedAt: Date.now(),
+          };
+        })
+      );
+    } catch (error: any) {
+      if (
+        error?.name ===
+        'AbortError'
+      ) {
+        return;
+      }
+
+      const errorMessage =
+        error?.message ||
+        "Ahemad's AI could not generate a response. Please try again.";
+
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id !== targetConvId) {
+            return conv;
+          }
+
+          return {
+            ...conv,
+            messages: conv.messages.map((m) =>
+              m.id === assistantMessageId
+                ? {
+                    ...m,
+                    content: '',
+                    status: 'error' as const,
+                    error: errorMessage,
+                  }
+                : m
+            ),
+            updatedAt: Date.now(),
+          };
+        })
+      );
+    } finally {
+      if (
+        abortControllerRef.current ===
+        abortController
+      ) {
+        abortControllerRef.current = null;
+      }
+
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectConversation = (
+    id: string
+  ) => {
+    if (isLoading && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+    }
+
+    setActiveId(id);
+    setSidebarOpen(false);
+    setInputDraft('');
+  };
+
+  const handleSelectMode = (
+    newMode: AssistantMode
+  ) => {
+    handleUpdateSettings({
+      activeMode: newMode,
+    });
+  };
+
+  return (
+    <div className="h-screen w-full bg-[#080812] text-zinc-100 flex overflow-hidden">
+      <Sidebar
+        conversations={conversations}
+        activeConversationId={activeId}
+        onSelectConversation={
+          handleSelectConversation
+        }
+        onNewChat={handleNewChat}
+        onDeleteConversation={
+          handleDeleteConversation
+        }
+        onRenameConversation={
+          handleRenameConversation
+        }
+        onTogglePinConversation={
+          handleTogglePin
+        }
+        onClearAll={handleClearAll}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        isOpen={sidebarOpen}
+        onCloseMobile={() =>
+          setSidebarOpen(false)
+        }
+        onOpenSettings={() =>
+          setIsSettingsOpen(true)
+        }
+      />
+
+      <main className="flex-1 min-w-0 flex flex-col bg-gradient-to-b from-[#0B0B16] via-[#0B0B18] to-[#080812]">
+        <Header
+          onToggleSidebar={() =>
+            setSidebarOpen((prev) => !prev)
+          }
+          onNewChat={handleNewChat}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          health={health}
+          activeChatTitle={
+            currentConversation?.title
+          }
+          onOpenSettings={() =>
+            setIsSettingsOpen(true)
+          }
+          activeMode={settings.activeMode}
+        />
+
+        <div className="flex-1 min-h-0 relative">
+          <div className="absolute inset-0 overflow-y-auto">
+            <div className="min-h-full flex flex-col">
+              {currentConversation &&
+              currentConversation.messages.length >
+                0 ? (
+                <div className="flex-1">
+                  {currentConversation.messages.map(
+                    (message, index) => {
+                      const isLastAssistant =
+                        message.role ===
+                          'assistant' &&
+                        index ===
+                          currentConversation.messages.length -
+                            1;
+
+                      return (
+                        <ChatMessage
+                          key={message.id}
+                          message={message}
+                          isLastAssistantMessage={
+                            isLastAssistant
+                          }
+                          isLoading={isLoading}
+                          onRegenerate={
+                            isLastAssistant
+                              ? handleRegenerate
+                              : undefined
+                          }
+                          onEditMessage={
+                            message.role ===
+                            'user'
+                              ? handleEditMessage
+                              : undefined
+                          }
+                        />
+                      );
+                    }
+                  )}
+
+                  <div
+                    ref={messagesEndRef}
+                    className="h-2"
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <WelcomeScreen
+                    onSuggestionClick={(
+                      prompt: string
+                    ) => {
+                      handleSendMessage(prompt);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="shrink-0">
+          <ChatInput
+            onSendMessage={
+              handleSendMessage
             }
+            onStopGeneration={
+              handleStopGeneration
+            }
+            isLoading={isLoading}
+            initialText={inputDraft}
+          />
+        </div>
+      </main>
 
-            return m;
-          });
-
-         
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() =>
+          setIsSettingsOpen(false)
+        }
+        settings={settings}
+        onUpdateS
