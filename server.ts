@@ -359,7 +359,7 @@ app.post('/api/chat/generate', async (req: Request, res: Response) => {
           } else if (att.data && att.mimeType) {
             parts.push({
               inlineData: {
-                data: att.data.replace(/^data:[^;]+;base64,/, ''),
+                data: att.data.replace(/^data:[^;]+;base64, ''),
                 mimeType: att.mimeType,
               },
             });
