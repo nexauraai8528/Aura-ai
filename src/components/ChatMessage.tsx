@@ -32,13 +32,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+
   const isAssistant = message.role === 'assistant';
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (err) {
       console.error('Failed to copy text:', err);
     }
@@ -65,8 +69,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
 
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+    };
 
     setIsSpeaking(true);
     window.speechSynthesis.speak(utterance);
@@ -101,31 +110,35 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           }`}
         >
 
-          {/* Header info */}
+          {/* Header Info */}
           <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-purple-500/15">
             <div className="flex items-center gap-2">
               <span className="font-luxury font-semibold text-sm tracking-wide text-white">
                 {isAssistant ? "Ahemad's AI" : 'You'}
               </span>
 
-              {isAssistant && message.mode && message.mode !== 'general' && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#211B3D] text-purple-200 border border-purple-500/25 capitalize">
-                  {message.mode}
-                </span>
-              )}
+              {isAssistant &&
+                message.mode &&
+                message.mode !== 'general' && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#211B3D] text-purple-200 border border-purple-500/25 capitalize">
+                    {message.mode}
+                  </span>
+                )}
             </div>
 
             <div className="flex items-center gap-2">
-              {!isAssistant && onEditMessage && message.content && (
-                <button
-                  type="button"
-                  onClick={() => onEditMessage(message.content)}
-                  className="p-1 rounded text-purple-300 hover:text-white transition cursor-pointer"
-                  title="Edit and resend message"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                </button>
-              )}
+              {!isAssistant &&
+                onEditMessage &&
+                message.content && (
+                  <button
+                    type="button"
+                    onClick={() => onEditMessage(message.content)}
+                    className="p-1 rounded text-purple-300 hover:text-white transition cursor-pointer"
+                    title="Edit and resend message"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                )}
 
               <span className="text-[11px] text-zinc-400 font-medium">
                 {new Date(message.timestamp).toLocaleTimeString([], {
@@ -140,45 +153,53 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {isAssistant && (
             <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-purple-300/70">
               <span>Founder &amp; Chief Architect</span>
+
               <span className="text-purple-500/50">•</span>
+
               <span className="font-medium text-purple-200/80">
                 𝑬𝒓. 𝑨𝒉𝒆𝒎𝒂𝒅 𝑰𝒏𝒂𝒎𝒅𝒂𝒂𝒓
               </span>
+
               <span className="text-purple-500/50">•</span>
+
               <span>Powered by Nexaura Tech</span>
             </div>
           )}
 
           {/* User Attachments */}
-          {message.attachments && message.attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 py-1 mb-2">
-              {message.attachments.map((att) => (
-                <div
-                  key={att.id}
-                  className="rounded-lg overflow-hidden border border-purple-500/20 bg-[#111022]/80 max-w-[200px]"
-                >
-                  {att.mimeType.startsWith('image/') ? (
-                    <img
-                      src={att.data}
-                      alt={att.name}
-                      className="max-h-40 w-auto object-cover rounded"
-                    />
-                  ) : (
-                    <div className="p-2 text-xs font-mono truncate text-zinc-200">
-                      📄 {att.name}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {message.attachments &&
+            message.attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 py-1 mb-2">
+                {message.attachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="rounded-lg overflow-hidden border border-purple-500/20 bg-[#111022]/80 max-w-[200px]"
+                  >
+                    {att.mimeType.startsWith('image/') ? (
+                      <img
+                        src={att.data}
+                        alt={att.name}
+                        className="max-h-40 w-auto object-cover rounded"
+                      />
+                    ) : (
+                      <div className="p-2 text-xs font-mono truncate text-zinc-200">
+                        📄 {att.name}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
           {/* Message Body */}
-          {message.status === 'sending' && !message.content ? (
+          {message.status === 'sending' &&
+          !message.content ? (
             <div className="flex items-center gap-2.5 py-2 text-purple-300 text-sm">
               <div className="flex gap-1.5 items-center">
                 <span className="w-2 h-2 rounded-full bg-purple-300 animate-bounce [animation-delay:-0.3s]" />
+
                 <span className="w-2 h-2 rounded-full bg-purple-300 animate-bounce [animation-delay:-0.15s]" />
+
                 <span className="w-2 h-2 rounded-full bg-purple-300 animate-bounce" />
               </div>
 
@@ -188,15 +209,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             </div>
           ) : (
             <div className="text-zinc-100 text-[15px] leading-relaxed break-words markdown-content">
+
               {isAssistant ? (
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    code({ className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      const codeString = String(children).replace(/\n$/, '');
+                    code({
+                      className,
+                      children,
+                      ...props
+                    }) {
+                      const match =
+                        /language-(\w+)/.exec(
+                          className || ''
+                        );
+
+                      const codeString = String(
+                        children
+                      ).replace(/\n$/, '');
+
                       const isInline =
-                        !match && !codeString.includes('\n');
+                        !match &&
+                        !codeString.includes('\n');
 
                       if (isInline) {
                         return (
@@ -211,7 +245,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
                       return (
                         <CodeBlock
-                          language={match ? match[1] : ''}
+                          language={
+                            match ? match[1] : ''
+                          }
                           value={codeString}
                         />
                       );
@@ -389,6 +425,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   {copied ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-green-300" />
+
                       <span className="text-green-300 font-medium">
                         Copied!
                       </span>
@@ -396,6 +433,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5" />
+
                       <span>Copy</span>
                     </>
                   )}
@@ -411,11 +449,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       ? 'text-white bg-[#211B3D]'
                       : 'text-purple-300 hover:text-white'
                   }`}
-                  title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
+                  title={
+                    isSpeaking
+                      ? 'Stop speaking'
+                      : 'Read aloud'
+                  }
                 >
                   {isSpeaking ? (
                     <>
                       <VolumeX className="w-3.5 h-3.5 text-amber-300" />
+
                       <span className="text-amber-300">
                         Stop
                       </span>
@@ -423,6 +466,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   ) : (
                     <>
                       <Volume2 className="w-3.5 h-3.5" />
+
                       <span>Read Aloud</span>
                     </>
                   )}
@@ -436,4 +480,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       id="regenerate-message-btn"
                       type="button"
                       onClick={onRegenerate}
-                      className="flex items
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[#211B3D] text-purple-300 hover:text-white border border-transparent hover:border-purple-500/20 transition-colors cursor-pointer"
+                      title="Regenerate response"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+
+                      <span>Regenerate</span>
+                    </button>
+                  )}
+              </div>
+            )}
+        </div>
+      </div>
+    </div>
+  );
+};
