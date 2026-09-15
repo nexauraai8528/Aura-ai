@@ -6,7 +6,10 @@ interface CodeBlockProps {
   value: string;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ language = 'text', value }) => {
+export const CodeBlock: React.FC<CodeBlockProps> = ({
+  language = 'text',
+  value,
+}) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -19,30 +22,40 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ language = 'text', value }
     }
   };
 
-  const displayLanguage = language.replace(/^language-/, '') || 'code';
+  const displayLanguage =
+    language.replace(/^language-/, '') || 'code';
 
   return (
-    <div className="relative my-4 rounded-xl overflow-hidden border border-[#6B8E7B]/30 bg-[#14211D] text-[#F1E9D2] shadow-md shadow-[#121E1B]/60 group">
+    <div className="relative my-4 rounded-xl overflow-hidden border border-purple-500/25 bg-[#0F0D1D] text-zinc-100 shadow-lg shadow-purple-950/20 group">
+
       {/* Code Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#1A2B26] border-b border-[#6B8E7B]/25 text-xs font-mono">
-        <span className="uppercase tracking-wider font-semibold text-[#B7C9B1] text-[11px]">
-          {displayLanguage}
-        </span>
+      <div className="flex items-center justify-between px-4 py-2 bg-[#17132A] border-b border-purple-500/20 text-xs font-mono">
+
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-purple-400 shadow-sm shadow-purple-400/60" />
+
+          <span className="uppercase tracking-wider font-semibold text-purple-200 text-[11px]">
+            {displayLanguage}
+          </span>
+        </div>
+
         <button
           id={`copy-code-btn-${displayLanguage}`}
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#243B35] hover:bg-[#2D4942] text-[#F1E9D2] border border-[#6B8E7B]/35 transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#211B3D] hover:bg-[#31205A] text-zinc-100 border border-purple-500/25 transition-colors cursor-pointer"
           title="Copy code to clipboard"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-[#B7C9B1]" />
-              <span className="text-[#B7C9B1] font-medium">Copied</span>
+              <Check className="w-3.5 h-3.5 text-green-300" />
+              <span className="text-green-300 font-medium">
+                Copied
+              </span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5 text-[#B7C9B1]" />
+              <Copy className="w-3.5 h-3.5 text-purple-300" />
               <span>Copy</span>
             </>
           )}
@@ -50,12 +63,18 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ language = 'text', value }
       </div>
 
       {/* Code Content */}
-      <div className="p-4 overflow-x-auto text-[13.5px] leading-relaxed font-mono">
-        <pre className="text-[#F1E9D2]/95">
+      <div className="p-4 overflow-x-auto text-[13.5px] leading-relaxed font-mono scrollbar-thin">
+        <pre className="text-zinc-200">
           <code>{value}</code>
         </pre>
+      </div>
+
+      {/* Small Branding */}
+      <div className="px-4 py-1.5 border-t border-purple-500/10 bg-[#0C0A16]">
+        <span className="text-[9px] text-purple-300/50 tracking-wide">
+          Ahemad's AI • Powered by Nexaura Tech
+        </span>
       </div>
     </div>
   );
 };
-
