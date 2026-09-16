@@ -1,20 +1,33 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
+  Settings,
   Moon,
   Sun,
-  Shield,
-  Sparkles,
-  Sliders,
-  CheckCircle2,
+  Monitor,
+  Palette,
+  Type,
   MessageSquare,
-  Bot,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
+  Bell,
+  BellOff,
+  ShieldCheck,
+  Database,
   Trash2,
+  RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
   Zap,
 } from 'lucide-react';
 import {
   AppSettings,
+  AppTheme,
   AssistantMode,
+  FontSize,
   HealthStatus,
 } from '../types';
 
@@ -22,47 +35,136 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: AppSettings;
-  onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
+  onUpdateSettings: (updates: Partial<AppSettings>) => void;
   health: HealthStatus | null;
   onClearAllConversations: () => void;
   onResetAllData: () => void;
 }
 
-const MODES: {
+const THEMES: {
+  id: AppTheme;
+  name: string;
+  description: string;
+  preview: string;
+}[] = [
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    description: 'Deep futuristic dark',
+    preview: 'bg-gradient-to-br from-[#090912] via-[#17122B] to-[#31205A]',
+  },
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    description: 'Cool blue atmosphere',
+    preview: 'bg-gradient-to-br from-[#07121C] via-[#12324A] to-[#1677A8]',
+  },
+  {
+    id: 'lavender',
+    name: 'Lavender',
+    description: 'Soft purple glow',
+    preview: 'bg-gradient-to-br from-[#130D1E] via-[#35204E] to-[#8B5CF6]',
+  },
+  {
+    id: 'sage',
+    name: 'Sage',
+    description: 'Calm green tone',
+    preview: 'bg-gradient-to-br from-[#0B1410] via-[#1C3024] to-[#5C8A68]',
+  },
+  {
+    id: 'burgundy',
+    name: 'Burgundy',
+    description: 'Rich red atmosphere',
+    preview: 'bg-gradient-to-br from-[#16090D] via-[#401622] to-[#8F3048]',
+  },
+  {
+    id: 'terracotta',
+    name: 'Terracotta',
+    description: 'Warm modern tone',
+    preview: 'bg-gradient-to-br from-[#180F0B] via-[#4B281C] to-[#C56B45]',
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    description: 'Clean business style',
+    preview: 'bg-gradient-to-br from-[#0C1118] via-[#202A38] to-[#526579]',
+  },
+  {
+    id: 'neon',
+    name: 'Neon',
+    description: 'High-energy futuristic',
+    preview: 'bg-gradient-to-br from-[#05080B] via-[#12272B] to-[#00A6A6]',
+  },
+  {
+    id: 'pink',
+    name: 'Pink',
+    description: 'Modern vibrant style',
+    preview: 'bg-gradient-to-br from-[#180A14] via-[#45203A] to-[#D9468A]',
+  },
+];
+
+const FONT_SIZES: {
+  id: FontSize;
+  name: string;
+  sample: string;
+}[] = [
+  {
+    id: 'small',
+    name: 'Small',
+    sample: 'Aa',
+  },
+  {
+    id: 'medium',
+    name: 'Medium',
+    sample: 'Aa',
+  },
+  {
+    id: 'large',
+    name: 'Large',
+    sample: 'Aa',
+  },
+  {
+    id: 'extra-large',
+    name: 'Extra Large',
+    sample: 'Aa',
+  },
+];
+
+const ASSISTANT_MODES: {
   id: AssistantMode;
-  title: string;
-  desc: string;
-  icon: string;
+  name: string;
+  description: string;
+  icon: React.ElementType;
 }[] = [
   {
     id: 'general',
-    title: 'General Assistant',
-    desc: 'Smart, friendly and versatile help for everyday questions.',
-    icon: '🌟',
+    name: 'General',
+    description: 'Everyday questions and conversations',
+    icon: Sparkles,
   },
   {
     id: 'coding',
-    title: 'Coding Assistant',
-    desc: 'Clean, reliable and production-ready programming assistance.',
-    icon: '💻',
+    name: 'Coding',
+    description: 'Programming and technical help',
+    icon: Zap,
   },
   {
     id: 'tutor',
-    title: 'Study Tutor',
-    desc: 'Simple step-by-step explanations with practical examples.',
-    icon: '📚',
+    name: 'Tutor',
+    description: 'Step-by-step learning',
+    icon: MessageSquare,
   },
   {
     id: 'writing',
-    title: 'Writing Assistant',
-    desc: 'Improve writing, grammar, tone, clarity and structure.',
-    icon: '✍️',
+    name: 'Writing',
+    description: 'Writing, rewriting and editing',
+    icon: Type,
   },
   {
     id: 'research',
-    title: 'Research Assistant',
-    desc: 'Structured analysis, explanations and balanced viewpoints.',
-    icon: '🔬',
+    name: 'Research',
+    description: 'Analysis and detailed research',
+    icon: Database,
   },
 ];
 
@@ -75,424 +177,388 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearAllConversations,
   onResetAllData,
 }) => {
-  if (!isOpen) return null;
+  const [activeSection, setActiveSection] = useState<
+    'appearance' | 'assistant' | 'chat' | 'privacy'
+  >('appearance');
+
+  const [showClearConfirm, setShowClearConfirm] =
+    useState(false);
+
+  const [showResetConfirm, setShowResetConfirm] =
+    useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowClearConfirm(false);
+      setShowResetConfirm(false);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const currentTheme =
+    settings.appTheme || 'midnight';
+
+  const currentFontSize =
+    settings.fontSize || 'medium';
+
+  const currentMode =
+    settings.activeMode || 'general';
+
+  const handleThemeChange = (theme: AppTheme) => {
+    onUpdateSettings({
+      appTheme: theme,
+    });
+  };
+
+  const handleFontSizeChange = (
+    fontSize: FontSize
+  ) => {
+    onUpdateSettings({
+      fontSize,
+    });
+  };
+
+  const handleModeChange = (
+    mode: AssistantMode
+  ) => {
+    onUpdateSettings({
+      activeMode: mode,
+    });
+  };
+
+  const handleThemeModeChange = (
+    theme: 'dark' | 'light' | 'system'
+  ) => {
+    onUpdateSettings({
+      theme,
+    });
+  };
+
+  const handleClear = () => {
+    onClearAllConversations();
+    setShowClearConfirm(false);
+    onClose();
+  };
+
+  const handleReset = () => {
+    onResetAllData();
+    setShowResetConfirm(false);
+    onClose();
+  };
+
+  const sections = [
+    {
+      id: 'appearance' as const,
+      label: 'Appearance',
+      icon: Palette,
+    },
+    {
+      id: 'assistant' as const,
+      label: 'Assistant',
+      icon: Sparkles,
+    },
+    {
+      id: 'chat' as const,
+      label: 'Chat',
+      icon: MessageSquare,
+    },
+    {
+      id: 'privacy' as const,
+      label: 'Privacy & Data',
+      icon: ShieldCheck,
+    },
+  ];
 
   return (
     <div
-      id="settings-modal-backdrop"
-      onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fadeIn"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ahemad's AI Settings"
     >
-      <div
-        id="settings-modal-card"
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl bg-[#100E1D] border border-purple-500/25 text-zinc-100 shadow-2xl shadow-purple-950/50 overflow-hidden"
-      >
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Close settings"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm cursor-default"
+      />
 
+      {/* Modal */}
+      <div className="relative w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-3xl border border-purple-500/25 bg-[#0D0B18]/95 shadow-[0_25px_100px_rgba(0,0,0,0.65)] backdrop-blur-2xl text-zinc-100">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-purple-500/15 bg-[#17132A]">
-          <div className="flex items-center gap-2.5">
-
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4C2A85] to-[#4169E1] flex items-center justify-center text-white border border-purple-300/30 shadow-lg shadow-purple-950/30">
-              <Sliders className="w-4 h-4" />
+        <div className="flex items-center justify-between gap-4 px-5 sm:px-7 py-4 border-b border-purple-500/15 bg-[#111022]/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#31205A] via-[#5B3AAE] to-[#4F8CFF] flex items-center justify-center border border-purple-300/25 shadow-lg shadow-purple-950/30">
+              <Settings className="w-5 h-5 text-purple-100" />
             </div>
 
             <div>
-              <h2 className="font-luxury font-bold text-lg tracking-wide text-white">
-                Ahemad's AI Settings
+              <h2 className="font-luxury text-lg sm:text-xl font-bold text-white">
+                Settings
               </h2>
 
-              <div className="flex flex-wrap items-center gap-1 text-[10px] text-purple-300/70 font-medium">
-                <span>Founder &amp; Chief Architect</span>
-                <span>•</span>
-                <span>𝑬𝒓. 𝑨𝒉𝒆𝒎𝒂𝒅 𝑰𝒏𝒂𝒎𝒅𝒂𝒂𝒓</span>
-              </div>
+              <p className="text-xs text-zinc-400">
+                Customize your Ahemad's AI experience
+              </p>
             </div>
           </div>
 
           <button
-            id="close-settings-btn"
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-purple-300 hover:text-white hover:bg-purple-500/15 transition cursor-pointer"
+            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-[#211B3D] border border-transparent hover:border-purple-500/20 transition cursor-pointer"
             title="Close settings"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin text-sm">
-
-          {/* Appearance */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Appearance</span>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#17132A]/80 border border-purple-500/20 flex items-center justify-between">
-              <div>
-                <div className="font-medium text-white">
-                  Ahemad's AI Theme
-                </div>
-
-                <div className="text-xs text-zinc-400">
-                  {settings.theme === 'dark'
-                    ? 'Futuristic Dark Canvas'
-                    : 'Light Canvas'}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 p-1 bg-[#0D0B17] rounded-lg border border-purple-500/20">
-
-                <button
-                  id="theme-btn-dark"
-                  type="button"
-                  onClick={() =>
-                    onUpdateSettings({ theme: 'dark' })
-                  }
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                    settings.theme === 'dark'
-                      ? 'bg-gradient-to-r from-[#5B3FA7] to-[#4169E1] text-white shadow-lg'
-                      : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <Moon className="w-3.5 h-3.5" />
-                  <span>Dark</span>
-                </button>
-
-                <button
-                  id="theme-btn-light"
-                  type="button"
-                  onClick={() =>
-                    onUpdateSettings({ theme: 'light' })
-                  }
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
-                    settings.theme === 'light'
-                      ? 'bg-gradient-to-r from-[#5B3FA7] to-[#4169E1] text-white shadow-lg'
-                      : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <Sun className="w-3.5 h-3.5" />
-                  <span>Light</span>
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* Assistant Mode */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
-              <Bot className="w-3.5 h-3.5" />
-              <span>Assistant Mode</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
-              {MODES.map((m) => {
-                const isSelected =
-                  settings.activeMode === m.id;
+        {/* Main */}
+        <div className="flex flex-col md:flex-row max-h-[calc(92vh-80px)]">
+          {/* Sidebar */}
+          <aside className="md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-purple-500/15 bg-[#0A0912]/70">
+            <div className="flex md:flex-col gap-1 p-3 overflow-x-auto">
+              {sections.map((section) => {
+                const Icon = section.icon;
+                const selected =
+                  activeSection === section.id;
 
                 return (
                   <button
-                    key={m.id}
-                    id={`settings-mode-${m.id}`}
+                    key={section.id}
                     type="button"
                     onClick={() =>
-                      onUpdateSettings({
-                        activeMode: m.id,
-                      })
+                      setActiveSection(section.id)
                     }
-                    className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#211B3D] border-purple-400/60 shadow-[0_0_15px_rgba(139,92,246,0.15)]'
-                        : 'bg-[#17132A]/50 border-purple-500/15 hover:border-purple-500/35 hover:bg-[#211B3D]/60'
+                    className={`shrink-0 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer ${
+                      selected
+                        ? 'bg-[#211B3D] text-white border border-purple-500/25 shadow-sm'
+                        : 'text-zinc-400 hover:text-white hover:bg-[#151329]'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-0.5">
+                    <Icon
+                      className={`w-4 h-4 ${
+                        selected
+                          ? 'text-purple-300'
+                          : 'text-zinc-500'
+                      }`}
+                    />
 
-                      <div className="flex items-center gap-2 font-medium text-white">
-                        <span>{m.icon}</span>
-                        <span>{m.title}</span>
-                      </div>
-
-                      {isSelected && (
-                        <CheckCircle2 className="w-4 h-4 text-purple-300" />
-                      )}
-                    </div>
-
-                    <p className="text-xs text-zinc-400 pl-6 leading-relaxed">
-                      {m.desc}
-                    </p>
+                    <span>{section.label}</span>
                   </button>
                 );
               })}
             </div>
-          </section>
 
-          {/* Chat Behavior */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Chat Behavior</span>
-            </div>
+            {/* Branding */}
+            <div className="hidden md:block px-4 pb-5 mt-auto">
+              <div className="pt-4 border-t border-purple-500/10">
+                <p className="text-[10px] uppercase tracking-widest text-purple-400/70">
+                  Ahemad's AI
+                </p>
 
-            <div className="space-y-2 p-3.5 rounded-xl bg-[#17132A]/80 border border-purple-500/20">
-
-              {/* Enter to Send */}
-              <label className="flex items-center justify-between cursor-pointer py-1">
-                <div>
-                  <div className="font-medium text-white">
-                    Enter to Send
-                  </div>
-                  <div className="text-xs text-zinc-400">
-                    Press Shift+Enter for new lines
-                  </div>
-                </div>
-
-                <input
-                  id="toggle-enter-to-send"
-                  type="checkbox"
-                  checked={settings.enterToSend}
-                  onChange={(e) =>
-                    onUpdateSettings({
-                      enterToSend: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4 accent-purple-500 rounded cursor-pointer"
-                />
-              </label>
-
-              <hr className="border-purple-500/10" />
-
-              {/* Streaming */}
-              <label className="flex items-center justify-between cursor-pointer py-1">
-                <div>
-                  <div className="font-medium text-white">
-                    Streaming Responses
-                  </div>
-                  <div className="text-xs text-zinc-400">
-                    Display responses progressively
-                  </div>
-                </div>
-
-                <input
-                  id="toggle-streaming"
-                  type="checkbox"
-                  checked={settings.streamingEnabled}
-                  onChange={(e) =>
-                    onUpdateSettings({
-                      streamingEnabled: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4 accent-purple-500 rounded cursor-pointer"
-                />
-              </label>
-
-              <hr className="border-purple-500/10" />
-
-              {/* Auto Scroll */}
-              <label className="flex items-center justify-between cursor-pointer py-1">
-                <div>
-                  <div className="font-medium text-white">
-                    Auto-Scroll
-                  </div>
-                  <div className="text-xs text-zinc-400">
-                    Follow new AI responses automatically
-                  </div>
-                </div>
-
-                <input
-                  id="toggle-auto-scroll"
-                  type="checkbox"
-                  checked={settings.autoScroll}
-                  onChange={(e) =>
-                    onUpdateSettings({
-                      autoScroll: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4 accent-purple-500 rounded cursor-pointer"
-                />
-              </label>
-            </div>
-          </section>
-
-          {/* Intelligence */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
-              <Zap className="w-3.5 h-3.5" />
-              <span>AI Intelligence</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#17132A]/80 border border-purple-500/20">
-
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#5B3FA7] to-[#4169E1] flex items-center justify-center shrink-0">
-                  <Bot className="w-4 h-4 text-white" />
-                </div>
-
-                <div className="flex-1">
-                  <div className="font-semibold text-white">
-                    Ahemad's AI Engine
-                  </div>
-
-                  <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                    Intelligent responses powered by the secure
-                    Ahemad's AI backend.
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <span
-                      className={`px-2 py-1 rounded-full text-[10px] font-medium border ${
-                        health?.hasApiKey
-                          ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                          : 'bg-red-500/10 text-red-300 border-red-500/20'
-                      }`}
-                    >
-                      {health?.hasApiKey
-                        ? 'Engine Active'
-                        : 'Engine Unavailable'}
-                    </span>
-
-                    {health?.isRateLimited && (
-                      <span className="px-2 py-1 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                        Temporarily Busy
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-purple-500/10 text-[10px] text-purple-300/50">
-                Internal engine details are hidden from the
-                user interface.
-              </div>
-            </div>
-          </section>
-
-          {/* Founder */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>About Ahemad's AI</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-gradient-to-br from-[#211B3D] to-[#111022] border border-purple-500/20">
-
-              <div className="text-center">
-                <div className="text-xs text-purple-300/70">
+                <p className="text-[11px] text-zinc-500 mt-1">
                   Founder &amp; Chief Architect
-                </div>
+                </p>
 
-                <div className="font-luxury text-xl font-semibold text-white mt-1">
+                <p className="text-xs text-purple-200/80 font-medium mt-0.5">
                   𝑬𝒓. 𝑨𝒉𝒆𝒎𝒂𝒅 𝑰𝒏𝒂𝒎𝒅𝒂𝒂𝒓
-                </div>
+                </p>
 
-                <div className="text-xs text-zinc-400 mt-1">
-                  Full Name: Ahemad Rehan
-                </div>
-
-                <div className="text-xs text-purple-300/70 mt-2">
+                <p className="text-[10px] text-zinc-600 mt-1">
                   Powered by Nexaura Tech
-                </div>
+                </p>
               </div>
             </div>
-          </section>
+          </aside>
 
-          {/* Privacy & Storage */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 uppercase tracking-wider">
-              <Shield className="w-3.5 h-3.5" />
-              <span>Privacy &amp; Storage</span>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#17132A]/80 border border-purple-500/20 space-y-3">
-
-              {/* Clear Chats */}
-              <div className="flex items-center justify-between gap-4">
+          {/* Content */}
+          <section className="flex-1 overflow-y-auto p-5 sm:p-7">
+            {/* ================= APPEARANCE ================= */}
+            {activeSection === 'appearance' && (
+              <div className="space-y-8">
                 <div>
-                  <div className="font-medium text-white">
-                    Clear Chat History
-                  </div>
+                  <h3 className="font-luxury text-lg font-bold text-white">
+                    Appearance
+                  </h3>
 
-                  <div className="text-xs text-zinc-400">
-                    Remove all stored conversations
-                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Choose how Ahemad's AI looks on your device.
+                  </p>
                 </div>
 
-                <button
-                  id="clear-all-conversations-btn"
-                  type="button"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        'Are you sure you want to clear all conversation history?'
-                      )
-                    ) {
-                      onClearAllConversations();
-                      onClose();
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-xs font-medium transition cursor-pointer"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Clear
-                </button>
-              </div>
-
-              <hr className="border-purple-500/10" />
-
-              {/* Reset Data */}
-              <div className="flex items-center justify-between gap-4">
+                {/* Dark / Light / System */}
                 <div>
-                  <div className="font-medium text-white">
-                    Reset All Data
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sun className="w-4 h-4 text-purple-300" />
+
+                    <h4 className="text-sm font-semibold text-zinc-200">
+                      Display mode
+                    </h4>
                   </div>
 
-                  <div className="text-xs text-zinc-400">
-                    Reset chats, settings and cached state
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      {
+                        id: 'dark' as const,
+                        label: 'Dark',
+                        icon: Moon,
+                      },
+                      {
+                        id: 'light' as const,
+                        label: 'Light',
+                        icon: Sun,
+                      },
+                      {
+                        id: 'system' as const,
+                        label: 'System',
+                        icon: Monitor,
+                      },
+                    ].map((item) => {
+                      const Icon = item.icon;
+                      const selected =
+                        settings.theme === item.id;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() =>
+                            handleThemeModeChange(
+                              item.id
+                            )
+                          }
+                          className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border transition cursor-pointer ${
+                            selected
+                              ? 'border-purple-400/60 bg-[#211B3D] text-white shadow-[0_0_18px_rgba(139,92,246,0.12)]'
+                              : 'border-purple-500/15 bg-[#111022]/60 text-zinc-400 hover:text-white hover:bg-[#151329]'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+
+                          <span className="text-xs font-medium">
+                            {item.label}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <button
-                  id="reset-all-data-btn"
-                  type="button"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        'This will wipe all conversations and reset all settings to defaults. Proceed?'
-                      )
-                    ) {
-                      onResetAllData();
-                      onClose();
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/60 text-red-300 border border-red-500/30 text-xs font-medium transition cursor-pointer"
-                >
-                  Reset All
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
+                {/* Themes */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Palette className="w-4 h-4 text-purple-300" />
 
-        {/* Footer */}
-        <div className="px-6 py-3 border-t border-purple-500/15 bg-[#17132A] flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold text-zinc-200">
+                        Color theme
+                      </h4>
 
-          <div className="text-[9px] text-purple-300/50">
-            Ahemad's AI • Nexaura Tech
-          </div>
+                      <p className="text-[11px] text-zinc-500">
+                        Choose your preferred accent style.
+                      </p>
+                    </div>
+                  </div>
 
-          <button
-            id="done-settings-btn"
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#5B3FA7] to-[#4169E1] hover:from-[#6D4CC2] hover:to-[#4F7BFF] text-white font-semibold text-xs border border-purple-300/30 shadow-lg shadow-purple-950/30 transition cursor-pointer"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {THEMES.map((theme) => {
+                      const selected =
+                        currentTheme === theme.id;
+
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() =>
+                            handleThemeChange(
+                              theme.id
+                            )
+                          }
+                          className={`text-left rounded-2xl border overflow-hidden transition cursor-pointer ${
+                            selected
+                              ? 'border-purple-400/70 ring-2 ring-purple-400/20'
+                              : 'border-purple-500/15 hover:border-purple-400/40'
+                          }`}
+                        >
+                          <div
+                            className={`h-16 ${theme.preview} relative`}
+                          >
+                            {selected && (
+                              <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/30 backdrop-blur flex items-center justify-center">
+                                <CheckCircle2 className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-3 bg-[#151329]">
+                            <p className="text-xs font-semibold text-white">
+                              {theme.name}
+                            </p>
+
+                            <p className="text-[10px] text-zinc-500 mt-0.5">
+                              {theme.description}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Font Size */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Type className="w-4 h-4 text-purple-300" />
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-zinc-200">
+                        Font size
+                      </h4>
+
+                      <p className="text-[11px] text-zinc-500">
+                        Adjust text size for readability.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {FONT_SIZES.map((item) => {
+                      const selected =
+                        currentFontSize === item.id;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() =>
+                            handleFontSizeChange(
+                              item.id
+                            )
+                          }
+                          className={`p-3 rounded-xl border transition cursor-pointer ${
+                            selected
+                              ? 'border-purple-400/60 bg-[#211B3D]'
+                              : 'border-purple-500/15 bg-[#111022]/60 hover:bg-[#151329]'
+                          }`}
+                        >
+                          <span
+                            className={`block font-semibold text-white ${
+                              item.id === 'small'
+                                ? 'text-sm'
+                                : item.id === 'medium'
+                                ? 'text-base'
+                                : item.id === 'large'
+                                ? 'text-lg'
+                                : 'text-xl'
+                            }`}
+                          >
+                            {item.sample}
+                          </span>
+
+                          <span className="block text-[11px] text-zinc-400 mt-1">
+                            {
