@@ -1,26 +1,232 @@
 @import "tailwindcss";
 
+/* =========================================================
+   AHEMAD'S AI — GLOBAL THEME SYSTEM
+   ========================================================= */
+
+:root {
+  --ahemad-ai-background: #080812;
+  --ahemad-ai-glow: rgba(139, 92, 246, 0.10);
+  --ahemad-ai-accent: #8B5CF6;
+  --ahemad-ai-font-size: 16px;
+
+  color-scheme: dark;
+}
+
+/* =========================================================
+   APP THEMES
+   ========================================================= */
+
+html[data-app-theme="midnight"] {
+  --ahemad-ai-background: #080812;
+  --ahemad-ai-glow: rgba(139, 92, 246, 0.10);
+  --ahemad-ai-accent: #8B5CF6;
+}
+
+html[data-app-theme="ocean"] {
+  --ahemad-ai-background: #06121A;
+  --ahemad-ai-glow: rgba(14, 165, 233, 0.12);
+  --ahemad-ai-accent: #0EA5E9;
+}
+
+html[data-app-theme="lavender"] {
+  --ahemad-ai-background: #100A18;
+  --ahemad-ai-glow: rgba(192, 132, 252, 0.12);
+  --ahemad-ai-accent: #C084FC;
+}
+
+html[data-app-theme="sage"] {
+  --ahemad-ai-background: #08130F;
+  --ahemad-ai-glow: rgba(74, 222, 128, 0.10);
+  --ahemad-ai-accent: #4ADE80;
+}
+
+html[data-app-theme="burgundy"] {
+  --ahemad-ai-background: #16080D;
+  --ahemad-ai-glow: rgba(244, 63, 94, 0.10);
+  --ahemad-ai-accent: #F43F5E;
+}
+
+html[data-app-theme="terracotta"] {
+  --ahemad-ai-background: #160D08;
+  --ahemad-ai-glow: rgba(251, 146, 60, 0.11);
+  --ahemad-ai-accent: #FB923C;
+}
+
+html[data-app-theme="professional"] {
+  --ahemad-ai-background: #090C12;
+  --ahemad-ai-glow: rgba(96, 165, 250, 0.10);
+  --ahemad-ai-accent: #60A5FA;
+}
+
+html[data-app-theme="neon"] {
+  --ahemad-ai-background: #050B0B;
+  --ahemad-ai-glow: rgba(45, 212, 191, 0.12);
+  --ahemad-ai-accent: #2DD4BF;
+}
+
+html[data-app-theme="pink"] {
+  --ahemad-ai-background: #160812;
+  --ahemad-ai-glow: rgba(236, 72, 153, 0.12);
+  --ahemad-ai-accent: #EC4899;
+}
+
+/* =========================================================
+   GLOBAL HTML / BODY
+   ========================================================= */
+
+html {
+  min-height: 100%;
+  background: var(--ahemad-ai-background);
+  font-size: var(--ahemad-ai-font-size);
+  transition:
+    background-color 250ms ease,
+    color 250ms ease;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      var(--ahemad-ai-glow),
+      transparent 42%
+    ),
+    var(--ahemad-ai-background);
+
+  color: #f4f4f5;
+
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  transition:
+    background 250ms ease,
+    color 250ms ease;
+}
+
+/* =========================================================
+   ROOT
+   ========================================================= */
+
+#root {
+  min-height: 100vh;
+  background: transparent;
+}
+
+/* =========================================================
+   LUXURY FONT
+   ========================================================= */
+
 @layer utilities {
   .font-luxury {
-    font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+    font-family:
+      'Cormorant Garamond',
+      'Playfair Display',
+      Georgia,
+      serif;
   }
+
+  /* =======================================================
+     CUSTOM SCROLLBAR
+     ======================================================= */
 
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
+
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(107, 142, 123, 0.35);
+    background:
+      color-mix(
+        in srgb,
+        var(--ahemad-ai-accent) 35%,
+        transparent
+      );
+
     border-radius: 9999px;
   }
+
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: rgba(107, 142, 123, 0.6);
+    background:
+      color-mix(
+        in srgb,
+        var(--ahemad-ai-accent) 60%,
+        transparent
+      );
   }
 
-  /* Sage Serenity glass and glow utilities */
+  /* =======================================================
+     THEME GLASS
+     ======================================================= */
+
+  .ahemad-glass {
+    background:
+      color-mix(
+        in srgb,
+        var(--ahemad-ai-background) 78%,
+        white 4%
+      );
+
+    backdrop-filter: blur(16px);
+
+    border:
+      1px solid
+      color-mix(
+        in srgb,
+        var(--ahemad-ai-accent) 20%,
+        transparent
+      );
+  }
+
+  .ahemad-card {
+    background:
+      linear-gradient(
+        145deg,
+        color-mix(
+          in srgb,
+          var(--ahemad-ai-background) 85%,
+          white 5%
+        ),
+        color-mix(
+          in srgb,
+          var(--ahemad-ai-background) 94%,
+          black 6%
+        )
+      );
+
+    backdrop-filter: blur(18px);
+
+    border:
+      1px solid
+      color-mix(
+        in srgb,
+        var(--ahemad-ai-accent) 18%,
+        transparent
+      );
+  }
+
+  .ahemad-glow {
+    box-shadow:
+      0 0 24px
+      color-mix(
+        in srgb,
+        var(--ahemad-ai-accent) 12%,
+        transparent
+      );
+  }
+
+  /* =======================================================
+     SAGE COMPATIBILITY UTILITIES
+     ======================================================= */
+
   .sage-glass {
     background: rgba(36, 59, 53, 0.85);
     backdrop-filter: blur(14px);
@@ -34,39 +240,164 @@
   }
 
   .sage-card {
-    background: linear-gradient(145deg, rgba(36, 59, 53, 0.9) 0%, rgba(26, 44, 39, 0.95) 100%);
+    background:
+      linear-gradient(
+        145deg,
+        rgba(36, 59, 53, 0.9) 0%,
+        rgba(26, 44, 39, 0.95) 100%
+      );
+
     backdrop-filter: blur(16px);
     border: 1px solid rgba(183, 201, 177, 0.2);
   }
 
   .sage-card-light {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(241, 233, 210, 0.7) 100%);
+    background:
+      linear-gradient(
+        145deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(241, 233, 210, 0.7) 100%
+      );
+
     backdrop-filter: blur(16px);
     border: 1px solid rgba(107, 142, 123, 0.35);
   }
 
   .sage-composer-glow {
-    box-shadow: 0 10px 32px rgba(18, 30, 27, 0.45), 0 0 20px rgba(107, 142, 123, 0.15);
+    box-shadow:
+      0 10px 32px rgba(18, 30, 27, 0.45),
+      0 0 20px rgba(107, 142, 123, 0.15);
   }
 
   .sage-glow-subtle {
-    box-shadow: 0 0 16px rgba(183, 201, 177, 0.18);
+    box-shadow:
+      0 0 16px rgba(183, 201, 177, 0.18);
   }
+}
+
+/* =========================================================
+   MARKDOWN
+   ========================================================= */
+
+.markdown-content {
+  font-size: 1rem;
 }
 
 .markdown-content p {
   line-height: 1.72;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .markdown-content pre {
   margin: 0;
 }
 
-/* Ensure smooth text rendering */
-body {
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.markdown-content code {
+  font-size: 0.9em;
 }
 
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
 
+.markdown-content li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.markdown-content blockquote {
+  margin: 1rem 0;
+  padding-left: 1rem;
+
+  border-left:
+    3px solid
+    var(--ahemad-ai-accent);
+
+  color: #a1a1aa;
+}
+
+/* =========================================================
+   SELECTION
+   ========================================================= */
+
+::selection {
+  background:
+    color-mix(
+      in srgb,
+      var(--ahemad-ai-accent) 35%,
+      transparent
+    );
+
+  color: white;
+}
+
+/* =========================================================
+   FOCUS
+   ========================================================= */
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline:
+    2px solid
+    color-mix(
+      in srgb,
+      var(--ahemad-ai-accent) 70%,
+      white
+    );
+
+  outline-offset: 2px;
+}
+
+/* =========================================================
+   SMOOTH TRANSITIONS
+   ========================================================= */
+
+button,
+input,
+textarea,
+select {
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 640px) {
+  html {
+    font-size: var(--ahemad-ai-font-size);
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .markdown-content {
+    font-size: 0.95rem;
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  }
