@@ -1,497 +1,407 @@
-import React, { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React, { useMemo, useState } from 'react';
 import {
-  User,
   Copy,
   Check,
   RotateCcw,
-  AlertTriangle,
+  Pencil,
+  X,
+  User,
   Sparkles,
   Volume2,
   VolumeX,
-  Edit3,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Message } from '../types';
-import { CodeBlock } from './CodeBlock';
 
 interface ChatMessageProps {
   message: Message;
   isLastAssistantMessage?: boolean;
-  onRegenerate?: () => void;
+  onRegenerate?: (messageId: string) => void;
   isLoading?: boolean;
-  onEditMessage?: (content: string) => void;
+  onEditMessage?: (messageId: string, newText: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({
+export function ChatMessage({
   message,
-  isLastAssistantMessage,
+  isLastAssistantMessage = false,
   onRegenerate,
-  isLoading,
+  isLoading = false,
   onEditMessage,
-}) => {
+}: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(message.content);
+  const [speaking, setSpeaking] = useState(false);
 
-  const isAssistant = message.role === 'assistant';
+  const isUser = message.role === 'user';
+  const isStreaming = message.status === 'streaming';
+  const isError = message.status === 'error';
 
-  const handleCopy = async () => {
+  const formattedTime = useMemo(() => {
+    try {
+      return new Date(message.timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  }, [message.timestamp]);
+
+  const copyMessage = async () => {
+    if (!message.content) return;
+
     try {
       await navigator.clipboard.writeText(message.content);
       setCopied(true);
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         setCopied(false);
-      }, 2000);
-    } catch (err) {
-      console.error('Failed to copy text:', err);
+      }, 1500);
+    } catch {
+      // Clipboard may be unavailable in some browsers.
     }
   };
 
-  const handleToggleSpeech = () => {
-    if (!('speechSynthesis' in window)) {
-      alert('Speech synthesis is not supported by your browser.');
-      return;
-    }
+  const speakMessage = () => {
+    if (!message.content || !('speechSynthesis' in window)) return;
 
-    if (isSpeaking) {
+    if (speaking) {
       window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+      setSpeaking(false);
       return;
     }
 
     window.speechSynthesis.cancel();
 
-    const cleanText = message.content.replace(
-      /```[\s\S]*?```/g,
-      'Code block omitted.'
-    );
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utterance.rate = 1;
+    utterance.pitch = 1;
 
     utterance.onend = () => {
-      setIsSpeaking(false);
+      setSpeaking(false);
     };
 
     utterance.onerror = () => {
-      setIsSpeaking(false);
+      setSpeaking(false);
     };
 
-    setIsSpeaking(true);
+    setSpeaking(true);
     window.speechSynthesis.speak(utterance);
+  };
+
+  const saveEdit = () => {
+    const clean = editText.trim();
+
+    if (!clean) return;
+
+    onEditMessage?.(message.id, clean);
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setEditText(message.content);
+    setEditing(false);
   };
 
   return (
     <div
-      id={`message-${message.id}`}
-      className="w-full py-3 px-3 sm:px-4 md:px-6 transition-colors"
+      className={`group w-full py-5 ${
+        isUser ? 'flex justify-end' : 'flex justify-start'
+      }`}
     >
-      <div className="max-w-3xl mx-auto flex gap-3 sm:gap-4 items-start">
-
+      <div
+        className={`flex w-full max-w-4xl gap-3 md:gap-4 ${
+          isUser ? 'flex-row-reverse' : 'flex-row'
+        }`}
+      >
         {/* Avatar */}
-        <div className="shrink-0 pt-1">
-          {isAssistant ? (
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#31205A] via-[#4C2A85] to-[#6D5DF5] flex items-center justify-center text-white shadow-lg shadow-purple-950/40 border border-purple-400/30">
-              <Sparkles className="w-4 h-4 text-purple-200" />
-            </div>
+        <div
+          className={`shrink-0 flex items-center justify-center rounded-2xl ${
+            isUser
+              ? 'h-9 w-9 bg-zinc-800 border border-zinc-700'
+              : 'h-10 w-10 bg-gradient-to-br from-violet-600 via-purple-600 to-blue-600 shadow-lg shadow-purple-900/20'
+          }`}
+        >
+          {isUser ? (
+            <User size={17} className="text-zinc-300" />
           ) : (
-            <div className="w-8 h-8 rounded-xl bg-[#17152B] text-white flex items-center justify-center font-medium text-xs border border-purple-400/30">
-              <User className="w-4 h-4 text-purple-200" />
-            </div>
+            <Sparkles size={18} className="text-white" />
           )}
         </div>
 
-        {/* Content Container */}
+        {/* Message area */}
         <div
-          className={`flex-1 min-w-0 rounded-2xl p-4 md:p-5 transition-all ${
-            isAssistant
-              ? 'bg-[#151329]/90 backdrop-blur-md border border-purple-500/20 text-zinc-100 shadow-lg shadow-purple-950/10'
-              : 'bg-[#1B1833] border border-purple-500/25 text-zinc-100 shadow-sm'
+          className={`min-w-0 flex-1 ${
+            isUser ? 'flex flex-col items-end' : ''
           }`}
         >
+          {/* Name + time */}
+          <div
+            className={`mb-1.5 flex items-center gap-2 text-xs text-zinc-500 ${
+              isUser ? 'justify-end' : 'justify-start'
+            }`}
+          >
+            <span className="font-medium text-zinc-400">
+              {isUser ? 'You' : "Ahemad's AI"}
+            </span>
 
-          {/* Header Info */}
-          <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-purple-500/15">
-            <div className="flex items-center gap-2">
-              <span className="font-luxury font-semibold text-sm tracking-wide text-white">
-                {isAssistant ? "Ahemad's AI" : 'You'}
-              </span>
-
-              {isAssistant &&
-                message.mode &&
-                message.mode !== 'general' && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#211B3D] text-purple-200 border border-purple-500/25 capitalize">
-                    {message.mode}
-                  </span>
-                )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {!isAssistant &&
-                onEditMessage &&
-                message.content && (
-                  <button
-                    type="button"
-                    onClick={() => onEditMessage(message.content)}
-                    className="p-1 rounded text-purple-300 hover:text-white transition cursor-pointer"
-                    title="Edit and resend message"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-
-              <span className="text-[11px] text-zinc-400 font-medium">
-                {new Date(message.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-            </div>
+            {formattedTime && (
+              <>
+                <span>•</span>
+                <span>{formattedTime}</span>
+              </>
+            )}
           </div>
 
-          {/* Founder Branding */}
-          {isAssistant && (
-            <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-purple-300/70">
-              <span>Founder &amp; Chief Architect</span>
+          {/* Editing */}
+          {editing ? (
+            <div className="w-full max-w-2xl">
+              <textarea
+                value={editText}
+                onChange={(event) =>
+                  setEditText(event.target.value)
+                }
+                rows={4}
+                autoFocus
+                className="w-full resize-y rounded-2xl border border-violet-500/40 bg-zinc-900/90 px-4 py-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-600 focus:border-violet-500/70"
+              />
 
-              <span className="text-purple-500/50">•</span>
+              <div className="mt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 px-3 py-2 text-xs text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  <X size={14} />
+                  Cancel
+                </button>
 
-              <span className="font-medium text-purple-200/80">
-                𝑬𝒓. 𝑨𝒉𝒆𝒎𝒂𝒅 𝑰𝒏𝒂𝒎𝒅𝒂𝒂𝒓
-              </span>
-
-              <span className="text-purple-500/50">•</span>
-
-              <span>Powered by Nexaura Tech</span>
-            </div>
-          )}
-
-          {/* User Attachments */}
-          {message.attachments &&
-            message.attachments.length > 0 && (
-              <div className="flex flex-wrap gap-2 py-1 mb-2">
-                {message.attachments.map((att) => (
-                  <div
-                    key={att.id}
-                    className="rounded-lg overflow-hidden border border-purple-500/20 bg-[#111022]/80 max-w-[200px]"
-                  >
-                    {att.mimeType.startsWith('image/') ? (
-                      <img
-                        src={att.data}
-                        alt={att.name}
-                        className="max-h-40 w-auto object-cover rounded"
-                      />
-                    ) : (
-                      <div className="p-2 text-xs font-mono truncate text-zinc-200">
-                        📄 {att.name}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                <button
+                  type="button"
+                  onClick={saveEdit}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-violet-500"
+                >
+                  <Check size={14} />
+                  Save & Send
+                </button>
               </div>
-            )}
-
-          {/* Message Body */}
-          {message.status === 'sending' &&
-          !message.content ? (
-            <div className="flex items-center gap-2.5 py-2 text-purple-300 text-sm">
-              <div className="flex gap-1.5 items-center">
-                <span className="w-2 h-2 rounded-full bg-purple-300 animate-bounce [animation-delay:-0.3s]" />
-
-                <span className="w-2 h-2 rounded-full bg-purple-300 animate-bounce [animation-delay:-0.15s]" />
-
-                <span className="w-2 h-2 rounded-full bg-purple-300 animate-bounce" />
-              </div>
-
-              <span className="text-xs font-medium tracking-wide">
-                Ahemad's AI is thinking...
-              </span>
             </div>
           ) : (
-            <div className="text-zinc-100 text-[15px] leading-relaxed break-words markdown-content">
+            <>
+              {/* Message bubble/content */}
+              <div
+                className={`relative ${
+                  isUser
+                    ? 'max-w-2xl rounded-3xl rounded-tr-md bg-violet-600/90 px-4 py-3 text-white shadow-lg shadow-violet-950/20'
+                    : `max-w-3xl ${
+                        isError
+                          ? 'rounded-2xl border border-red-500/20 bg-red-500/5'
+                          : ''
+                      }`
+                }`}
+              >
+                {message.content ? (
+                  isUser ? (
+                    <div className="whitespace-pre-wrap break-words text-[15px] leading-7">
+                      {message.content}
+                    </div>
+                  ) : (
+                    <div
+                      className={`prose prose-invert max-w-none break-words text-[15px] leading-7 ${
+                        isError
+                          ? 'text-red-300'
+                          : 'text-zinc-200'
+                      }`}
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ ...props }) => (
+                            <a
+                              {...props}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-violet-400 underline underline-offset-2 hover:text-violet-300"
+                            />
+                          ),
 
-              {isAssistant ? (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    code({
-                      className,
-                      children,
-                      ...props
-                    }) {
-                      const match =
-                        /language-(\w+)/.exec(
-                          className || ''
-                        );
+                          code: ({
+                            className,
+                            children,
+                            ...props
+                          }) => {
+                            const inline =
+                              !className;
 
-                      const codeString = String(
-                        children
-                      ).replace(/\n$/, '');
+                            if (inline) {
+                              return (
+                                <code
+                                  {...props}
+                                  className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-violet-300"
+                                >
+                                  {children}
+                                </code>
+                              );
+                            }
 
-                      const isInline =
-                        !match &&
-                        !codeString.includes('\n');
+                            return (
+                              <code
+                                {...props}
+                                className={`${className || ''} block overflow-x-auto rounded-xl bg-black/50 p-4 text-sm`}
+                              >
+                                {children}
+                              </code>
+                            );
+                          },
 
-                      if (isInline) {
-                        return (
-                          <code
-                            className="px-1.5 py-0.5 rounded bg-[#111022] text-purple-200 border border-purple-500/20 font-mono text-[13px]"
-                            {...props}
-                          >
-                            {children}
-                          </code>
-                        );
-                      }
+                          pre: ({ children }) => (
+                            <pre className="my-3 overflow-x-auto rounded-xl border border-zinc-800 bg-black/50">
+                              {children}
+                            </pre>
+                          ),
 
-                      return (
-                        <CodeBlock
-                          language={
-                            match ? match[1] : ''
-                          }
-                          value={codeString}
-                        />
-                      );
-                    },
+                          table: ({ children }) => (
+                            <div className="my-4 overflow-x-auto">
+                              <table className="min-w-full border-collapse text-sm">
+                                {children}
+                              </table>
+                            </div>
+                          ),
 
-                    p({ children }) {
-                      return (
-                        <p className="mb-3.5 last:mb-0 text-zinc-100 leading-relaxed">
-                          {children}
-                        </p>
-                      );
-                    },
+                          th: ({ children }) => (
+                            <th className="border border-zinc-700 bg-zinc-900 px-3 py-2 text-left font-semibold">
+                              {children}
+                            </th>
+                          ),
 
-                    h1({ children }) {
-                      return (
-                        <h1 className="font-luxury text-xl font-bold mt-5 mb-2.5 text-white tracking-wide">
-                          {children}
-                        </h1>
-                      );
-                    },
+                          td: ({ children }) => (
+                            <td className="border border-zinc-800 px-3 py-2">
+                              {children}
+                            </td>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex items-center gap-1.5 py-2">
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400" />
+                  </div>
+                )}
+              </div>
 
-                    h2({ children }) {
-                      return (
-                        <h2 className="font-luxury text-lg font-bold mt-4 mb-2 text-white tracking-wide">
-                          {children}
-                        </h2>
-                      );
-                    },
+              {/* Attachments */}
+              {message.attachments &&
+                message.attachments.length > 0 && (
+                  <div
+                    className={`mt-2 flex flex-wrap gap-2 ${
+                      isUser ? 'justify-end' : ''
+                    }`}
+                  >
+                    {message.attachments.map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        className="rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-400"
+                      >
+                        📎 {attachment.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                    h3({ children }) {
-                      return (
-                        <h3 className="font-luxury text-base font-semibold mt-3 mb-1.5 text-white">
-                          {children}
-                        </h3>
-                      );
-                    },
+              {/* Actions */}
+              {!isUser && message.content && (
+                <div className="mt-2 flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={copyMessage}
+                    title="Copy response"
+                    className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+                  >
+                    {copied ? (
+                      <Check size={15} />
+                    ) : (
+                      <Copy size={15} />
+                    )}
+                  </button>
 
-                    ul({ children }) {
-                      return (
-                        <ul className="list-disc pl-6 mb-3 space-y-1.5 marker:text-purple-300 text-zinc-100/95">
-                          {children}
-                        </ul>
-                      );
-                    },
+                  <button
+                    type="button"
+                    onClick={speakMessage}
+                    title={
+                      speaking
+                        ? 'Stop speaking'
+                        : 'Read response aloud'
+                    }
+                    className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+                  >
+                    {speaking ? (
+                      <VolumeX size={15} />
+                    ) : (
+                      <Volume2 size={15} />
+                    )}
+                  </button>
 
-                    ol({ children }) {
-                      return (
-                        <ol className="list-decimal pl-6 mb-3 space-y-1.5 marker:text-purple-300 text-zinc-100/95">
-                          {children}
-                        </ol>
-                      );
-                    },
+                  {onRegenerate &&
+                    isLastAssistantMessage && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onRegenerate(message.id)
+                        }
+                        disabled={isLoading}
+                        title="Regenerate response"
+                        className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <RotateCcw size={15} />
+                      </button>
+                    )}
 
-                    li({ children }) {
-                      return (
-                        <li className="pl-1 leading-normal">
-                          {children}
-                        </li>
-                      );
-                    },
-
-                    blockquote({ children }) {
-                      return (
-                        <blockquote className="border-l-2 border-purple-400 pl-4 italic text-zinc-300 bg-[#111022]/60 py-2 my-3 rounded-r-lg">
-                          {children}
-                        </blockquote>
-                      );
-                    },
-
-                    table({ children }) {
-                      return (
-                        <div className="overflow-x-auto my-4 rounded-xl border border-purple-500/20">
-                          <table className="min-w-full divide-y divide-purple-500/20 text-sm">
-                            {children}
-                          </table>
-                        </div>
-                      );
-                    },
-
-                    thead({ children }) {
-                      return (
-                        <thead className="bg-[#211B3D] text-white font-semibold">
-                          {children}
-                        </thead>
-                      );
-                    },
-
-                    th({ children }) {
-                      return (
-                        <th className="px-3.5 py-2 text-left text-xs font-semibold uppercase tracking-wider text-purple-200">
-                          {children}
-                        </th>
-                      );
-                    },
-
-                    td({ children }) {
-                      return (
-                        <td className="px-3.5 py-2 border-t border-purple-500/15 text-zinc-100">
-                          {children}
-                        </td>
-                      );
-                    },
-
-                    a({ href, children }) {
-                      return (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-purple-300 hover:text-white underline underline-offset-2 decoration-purple-400/40 font-medium transition-colors"
-                        >
-                          {children}
-                        </a>
-                      );
-                    },
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
-              ) : (
-                <div className="whitespace-pre-wrap text-zinc-100 leading-relaxed">
-                  {message.content}
+                  {message.status === 'error' &&
+                    message.error && (
+                      <span className="ml-2 text-xs text-red-400">
+                        {message.error}
+                      </span>
+                    )}
                 </div>
               )}
 
-              {/* Streaming Cursor */}
-              {message.status === 'streaming' && (
-                <span className="inline-block w-2 h-4 ml-1.5 bg-purple-400 animate-pulse align-middle" />
-              )}
-            </div>
-          )}
-
-          {/* Error Banner */}
-          {message.error && (
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-950/40 border border-red-500/40 text-red-200 text-xs mt-3">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-
-              <div className="flex-1">
-                <p className="font-semibold text-red-300">
-                  Generation error
-                </p>
-
-                <p className="mt-0.5">
-                  {message.error}
-                </p>
-
-                {onRegenerate && (
+              {/* User edit */}
+              {isUser && (
+                <div className="mt-1 flex justify-end opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                   <button
-                    onClick={onRegenerate}
                     type="button"
-                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#211B3D] text-zinc-100 font-medium hover:bg-[#31205A] border border-purple-500/25 transition cursor-pointer"
+                    onClick={() => {
+                      setEditText(message.content);
+                      setEditing(true);
+                    }}
+                    title="Edit message"
+                    className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    Retry
+                    <Pencil size={15} />
                   </button>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
+            </>
           )}
 
-          {/* Action Bar */}
-          {isAssistant &&
-            message.status !== 'sending' &&
-            message.content && (
-              <div className="flex items-center gap-1.5 pt-3 mt-1 border-t border-purple-500/15 text-purple-300 text-xs">
-
-                {/* Copy */}
-                <button
-                  id={`copy-message-${message.id}`}
-                  type="button"
-                  onClick={handleCopy}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[#211B3D] text-purple-300 hover:text-white border border-transparent hover:border-purple-500/20 transition-colors cursor-pointer"
-                  title="Copy response"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-green-300" />
-
-                      <span className="text-green-300 font-medium">
-                        Copied!
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
-
-                {/* Read Aloud */}
-                <button
-                  id={`speak-message-${message.id}`}
-                  type="button"
-                  onClick={handleToggleSpeech}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[#211B3D] border border-transparent hover:border-purple-500/20 transition-colors cursor-pointer ${
-                    isSpeaking
-                      ? 'text-white bg-[#211B3D]'
-                      : 'text-purple-300 hover:text-white'
-                  }`}
-                  title={
-                    isSpeaking
-                      ? 'Stop speaking'
-                      : 'Read aloud'
-                  }
-                >
-                  {isSpeaking ? (
-                    <>
-                      <VolumeX className="w-3.5 h-3.5 text-amber-300" />
-
-                      <span className="text-amber-300">
-                        Stop
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <Volume2 className="w-3.5 h-3.5" />
-
-                      <span>Read Aloud</span>
-                    </>
-                  )}
-                </button>
-
-                {/* Regenerate */}
-                {isLastAssistantMessage &&
-                  onRegenerate &&
-                  !isLoading && (
-                    <button
-                      id="regenerate-message-btn"
-                      type="button"
-                      onClick={onRegenerate}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-[#211B3D] text-purple-300 hover:text-white border border-transparent hover:border-purple-500/20 transition-colors cursor-pointer"
-                      title="Regenerate response"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-
-                      <span>Regenerate</span>
-                    </button>
-                  )}
-              </div>
-            )}
+          {/* Streaming indicator */}
+          {isStreaming && message.content && (
+            <div className="mt-1 flex items-center gap-1 text-[11px] text-violet-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+              Generating...
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-};
+}
+
+export default ChatMessage;
