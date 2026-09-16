@@ -39,38 +39,47 @@ const APP_THEME_CONFIG = {
   midnight: {
     background: '#080812',
     glow: 'rgba(139, 92, 246, 0.10)',
+    accent: '#8B5CF6',
   },
   ocean: {
     background: '#06121A',
     glow: 'rgba(14, 165, 233, 0.12)',
+    accent: '#0EA5E9',
   },
   lavender: {
     background: '#100A18',
     glow: 'rgba(192, 132, 252, 0.12)',
+    accent: '#C084FC',
   },
   sage: {
     background: '#08130F',
     glow: 'rgba(74, 222, 128, 0.10)',
+    accent: '#4ADE80',
   },
   burgundy: {
     background: '#16080D',
     glow: 'rgba(244, 63, 94, 0.10)',
+    accent: '#F43F5E',
   },
   terracotta: {
     background: '#160D08',
     glow: 'rgba(251, 146, 60, 0.11)',
+    accent: '#FB923C',
   },
   professional: {
     background: '#090C12',
     glow: 'rgba(96, 165, 250, 0.10)',
+    accent: '#60A5FA',
   },
   neon: {
     background: '#050B0B',
     glow: 'rgba(45, 212, 191, 0.12)',
+    accent: '#2DD4BF',
   },
   pink: {
     background: '#160812',
     glow: 'rgba(236, 72, 153, 0.12)',
+    accent: '#EC4899',
   },
 } as const;
 
@@ -104,7 +113,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] =
     useState(false);
 
-  const [inputDraft, setInputDraft] = useState('');
+  const [inputDraft, setInputDraft] =
+    useState('');
 
   const [sidebarOpen, setSidebarOpen] =
     useState(false);
@@ -123,7 +133,7 @@ export default function App() {
 
   /*
    * -------------------------------------------------------
-   * THEME
+   * APPEARANCE THEME
    * -------------------------------------------------------
    */
 
@@ -141,16 +151,14 @@ export default function App() {
         resolvedTheme = theme;
       }
 
+      document.documentElement.dataset.theme =
+        resolvedTheme;
+
       if (resolvedTheme === 'dark') {
         document.documentElement.classList.add('dark');
       } else {
-        document.documentElement.classList.remove(
-          'dark'
-        );
+        document.documentElement.classList.remove('dark');
       }
-
-      document.documentElement.dataset.theme =
-        resolvedTheme;
 
       storage.setTheme(theme);
     };
@@ -184,7 +192,7 @@ export default function App() {
 
   /*
    * -------------------------------------------------------
-   * APP THEME + FONT SIZE
+   * APP COLOR THEME + FONT SIZE
    * -------------------------------------------------------
    */
 
@@ -201,46 +209,71 @@ export default function App() {
     FONT_SIZE_CONFIG[activeFontSize];
 
   useEffect(() => {
-    document.documentElement.dataset.appTheme =
+    const root =
+      document.documentElement;
+
+    root.dataset.appTheme =
       activeAppTheme;
 
-    document.documentElement.style.setProperty(
+    root.style.setProperty(
       '--ahemad-ai-background',
       themeConfig.background
     );
 
-    document.documentElement.style.setProperty(
+    root.style.setProperty(
       '--ahemad-ai-glow',
       themeConfig.glow
     );
 
-    document.documentElement.style.setProperty(
+    root.style.setProperty(
+      '--ahemad-ai-accent',
+      themeConfig.accent
+    );
+
+    root.style.setProperty(
       '--ahemad-ai-font-size',
       fontSize
     );
 
     return () => {
-      delete document.documentElement.dataset
-        .appTheme;
+      root.removeAttribute(
+        'data-app-theme'
+      );
 
-      document.documentElement.style.removeProperty(
+      root.style.removeProperty(
         '--ahemad-ai-background'
       );
 
-      document.documentElement.style.removeProperty(
+      root.style.removeProperty(
         '--ahemad-ai-glow'
       );
 
-      document.documentElement.style.removeProperty(
+      root.style.removeProperty(
+        '--ahemad-ai-accent'
+      );
+
+      root.style.removeProperty(
         '--ahemad-ai-font-size'
       );
     };
   }, [
     activeAppTheme,
-    fontSize,
+    activeFontSize,
     themeConfig.background,
     themeConfig.glow,
+    themeConfig.accent,
+    fontSize,
   ]);
+
+  /*
+   * -------------------------------------------------------
+   * SAVE SETTINGS
+   * -------------------------------------------------------
+   */
+
+  useEffect(() => {
+    storage.saveSettings(settings);
+  }, [settings]);
 
   /*
    * -------------------------------------------------------
@@ -273,6 +306,8 @@ export default function App() {
    */
 
   useEffect(() => {
+    let cancelled = false;
+
     async function checkHealth() {
       try {
         const res = await fetch(
@@ -286,16 +321,24 @@ export default function App() {
         const data =
           await res.json();
 
-        setHealth(data);
+        if (!cancelled) {
+          setHealth(data);
+        }
       } catch (err) {
-        console.warn(
-          "Could not connect to Ahemad's AI server:",
-          err
-        );
+        if (!cancelled) {
+          console.warn(
+            "Could not connect to Ahemad's AI server:",
+            err
+          );
+        }
       }
     }
 
     checkHealth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /*
@@ -359,8 +402,10 @@ export default function App() {
         abortControllerRef.current
       ) {
         abortControllerRef.current.abort();
+
         abortControllerRef.current =
           null;
+
         setIsLoading(false);
       }
 
@@ -373,9 +418,11 @@ export default function App() {
 
         messages: [],
 
-        createdAt: Date.now(),
+        createdAt:
+          Date.now(),
 
-        updatedAt: Date.now(),
+        updatedAt:
+          Date.now(),
 
         model:
           health?.model ||
@@ -408,20 +455,19 @@ export default function App() {
    */
 
   useEffect(() => {
-    const handleKeyDown = (
-      e: KeyboardEvent
-    ) => {
-      if (
-        (e.metaKey ||
-          e.ctrlKey) &&
-        e.key.toLowerCase() ===
-          'k'
-      ) {
-        e.preventDefault();
+    const handleKeyDown =
+      (e: KeyboardEvent) => {
+        if (
+          (e.metaKey ||
+            e.ctrlKey) &&
+          e.key.toLowerCase() ===
+            'k'
+        ) {
+          e.preventDefault();
 
-        handleNewChat();
-      }
-    };
+          handleNewChat();
+        }
+      };
 
     window.addEventListener(
       'keydown',
@@ -568,7 +614,7 @@ export default function App() {
 
   /*
    * -------------------------------------------------------
-   * CLEAR ALL CONVERSATIONS
+   * CLEAR ALL
    * -------------------------------------------------------
    */
 
@@ -613,20 +659,15 @@ export default function App() {
 
       storage.clearAllData();
 
-      const defaultSettings: AppSettings =
-        {
-          ...DEFAULT_SETTINGS,
-        };
-
       setConversations([]);
 
       setActiveId(null);
 
       setTheme('dark');
 
-      setSettings(
-        defaultSettings
-      );
+      setSettings({
+        ...DEFAULT_SETTINGS,
+      });
 
       setInputDraft('');
 
@@ -808,6 +849,16 @@ export default function App() {
       text: string,
       attachments: Attachment[] = []
     ) => {
+      const cleanText =
+        text.trim();
+
+      if (
+        !cleanText &&
+        attachments.length === 0
+      ) {
+        return;
+      }
+
       let targetConvId =
         activeId;
 
@@ -816,7 +867,6 @@ export default function App() {
 
       /*
        * Create conversation
-       * automatically if needed.
        */
 
       if (!targetConvId) {
@@ -826,14 +876,16 @@ export default function App() {
               .toString(36)
               .slice(2, 8)}`,
 
-            title: text
-              ? text.length > 28
-                ? `${text.slice(
-                    0,
-                    28
-                  )}...`
-                : text
-              : 'New Chat',
+            title:
+              cleanText
+                ? cleanText.length >
+                  28
+                  ? `${cleanText.slice(
+                      0,
+                      28
+                    )}...`
+                  : cleanText
+                : 'New Chat',
 
             messages: [],
 
@@ -874,8 +926,8 @@ export default function App() {
 
         if (
           !conv ||
-          conv.messages
-            .length === 0
+          conv.messages.length ===
+            0
         ) {
           isFirstMessage =
             true;
@@ -892,7 +944,7 @@ export default function App() {
 
           role: 'user',
 
-          content: text,
+          content: cleanText,
 
           timestamp:
             Date.now(),
@@ -952,9 +1004,7 @@ export default function App() {
 
                 messages: [
                   ...conv.messages,
-
                   userMessage,
-
                   initialAssistantMessage,
                 ],
 
@@ -963,55 +1013,8 @@ export default function App() {
 
                 title:
                   isFirstMessage &&
-                  text
-                    ? text.length >
+                  cleanText
+                    ? cleanText.length >
                       28
-                      ? `${text.slice(
-                          0,
-                          28
-                        )}...`
-                      : text
-                    : conv.title,
-              };
-            }
-          )
-      );
-
-      setIsLoading(true);
-
-      /*
-       * Abort controller
-       */
-
-      const abortController =
-        new AbortController();
-
-      abortControllerRef.current =
-        abortController;
-
-      /*
-       * AI generated title
-       */
-
-      if (
-        isFirstMessage &&
-        text
-      ) {
-        fetch(
-          '/api/chat/title',
-          {
-            method: 'POST',
-
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-
-            body: JSON.stringify(
-              {
-                message: text,
-              }
-            ),
-          }
-        )
-        
+                      ? `${cleanText.slice(
+   
