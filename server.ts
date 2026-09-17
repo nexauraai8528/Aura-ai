@@ -1,232 +1,173 @@
-import express, { Request, Response } from 'express';
-import path from 'path';
-import dotenv from 'dotenv';
-import {
-  GoogleGenAI,
-  GenerateContentResponse,
-} from '@google/genai';
-import { createServer as createViteServer } from 'vite';
+import express from "express";
+import path from "path";
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { GoogleGenAI } from "@google/genai";
+import type { GenerateContentResponse } from "@google/genai";
+import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
-/*
-|--------------------------------------------------------------------------
-| MODEL CONFIGURATION
-|--------------------------------------------------------------------------
-*/
-
-if (
-  !process.env.GEMINI_MODEL ||
-  process.env.GEMINI_MODEL.includes('2.5') ||
-  process.env.GEMINI_MODEL.includes('2.0') ||
-  process.env.GEMINI_MODEL.includes('1.5')
-) {
-  process.env.GEMINI_MODEL = 'gemini-3.8-flash';
-}
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
+const PORT = Number(process.env.PORT) || 3000;
 
-const PORT =
-  Number(process.env.PORT) || 10000;
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
-app.use(
-  express.json({
-    limit: '25mb',
-  })
-);
+/* =========================================================
+   GEMINI CONFIGURATION
+   ========================================================= */
 
-let aiClient: GoogleGenAI | null = null;
+const DEFAULT_MODEL = "gemini-3.8-flash";
 
-/*
-|--------------------------------------------------------------------------
-| GEMINI CLIENT
-|--------------------------------------------------------------------------
-*/
+const FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3.1-flash-lite",
+];
+
+const GEMINI_MODEL =
+  process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+
+let modelCooldownUntil = 0;
+
+function getGeminiApiKey(): string {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured.");
+  }
+
+  return apiKey;
+}
 
 function getGeminiClient(): GoogleGenAI {
-  const apiKey =
-    process.env.GEMINI_API_KEY;
-
-  if (
-    !apiKey ||
-    apiKey.trim() === '' ||
-    apiKey === 'MY_GEMINI_API_KEY'
-  ) {
-    throw new Error(
-      'AI service is not configured.'
-    );
-  }
-
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey.trim(),
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
-  }
-
-  return aiClient;
+  return new GoogleGenAI({
+    apiKey: getGeminiApiKey(),
+  });
 }
-
-/*
-|--------------------------------------------------------------------------
-| MODEL NAME
-|--------------------------------------------------------------------------
-*/
 
 function getModelName(): string {
-  const envModel =
-    process.env.GEMINI_MODEL?.trim();
-
-  const deprecatedModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-001',
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-pro',
-    'gemini-2.0-flash-thinking',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-pro',
-  ];
-
-  if (
-    envModel &&
-    !deprecatedModels.includes(envModel) &&
-    !envModel.includes('2.5') &&
-    !envModel.includes('2.0') &&
-    !envModel.includes('1.5')
-  ) {
-    return envModel;
-  }
-
-  return 'gemini-3.8-flash';
+  return GEMINI_MODEL;
 }
 
-/*
-|--------------------------------------------------------------------------
-| MODEL FALLBACK / COOLDOWN
-|--------------------------------------------------------------------------
-*/
+function getCandidateModels(): string[] {
+  const configured = getModelName();
 
-const modelCooldownMap =
-  new Map<string, number>();
-
-function isModelInCooldown(
-  model: string
-): boolean {
-  const cooldownUntil =
-    modelCooldownMap.get(model);
-
-  if (!cooldownUntil) {
-    return false;
-  }
-
-  if (Date.now() >= cooldownUntil) {
-    modelCooldownMap.delete(model);
-    return false;
-  }
-
-  return true;
-}
-
-function markModelCooldown(
-  model: string,
-  err: any
-) {
-  let cooldownSec = 45;
-
-  try {
-    const raw =
-      typeof err === 'string'
-        ? err
-        : err?.message ||
-          JSON.stringify(err);
-
-    const retryMatch =
-      raw.match(
-        /retry in ([0-9.]+)s/i
-      ) ||
-      raw.match(
-        /retryDelay["']?\s*:\s*["']?([0-9]+)s/i
-      );
-
-    if (retryMatch?.[1]) {
-      const parsedSec =
-        Math.ceil(
-          parseFloat(
-            retryMatch[1]
-          )
-        );
-
-      if (
-        parsedSec > 0 &&
-        parsedSec <= 3600
-      ) {
-        cooldownSec =
-          parsedSec + 2;
-      }
-    } else if (
-      raw.includes(
-        'RESOURCE_EXHAUSTED'
-      ) ||
-      raw.includes('429')
-    ) {
-      cooldownSec = 60;
-    }
-  } catch {
-    // Ignore parsing errors.
-  }
-
-  modelCooldownMap.set(
-    model,
-    Date.now() +
-      cooldownSec * 1000
+  return [
+    configured,
+    ...FALLBACK_MODELS,
+  ].filter(
+    (model, index, array) =>
+      model && array.indexOf(model) === index
   );
 }
 
-function getOrderedCandidates(): string[] {
-  const configured =
-    getModelName();
+function isRateLimitError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
 
-  const candidates = [
-    configured,
-    'gemini-3.8-flash',
-    'gemini-3.6-flash',
-    'gemini-3.1-flash-lite',
-  ];
+  const normalized = message.toLowerCase();
 
-  const unique =
-    Array.from(
-      new Set(candidates)
-    );
-
-  const healthy =
-    unique.filter(
-      (model) =>
-        !isModelInCooldown(model)
-    );
-
-  const cooling =
-    unique.filter(
-      (model) =>
-        isModelInCooldown(model)
-    );
-
-  return [
-    ...healthy,
-    ...cooling,
-  ];
+  return (
+    normalized.includes("429") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("resource exhausted") ||
+    normalized.includes("quota")
+  );
 }
 
-/*
-|--------------------------------------------------------------------------
-| AHEMAD'S AI IDENTITY
-|--------------------------------------------------------------------------
-*/
+function isTemporaryModelError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("503") ||
+    normalized.includes("overloaded") ||
+    normalized.includes("temporarily unavailable") ||
+    normalized.includes("unavailable")
+  );
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+/* =========================================================
+   SAFE GEMINI GENERATION
+   ========================================================= */
+
+async function generateWithFallback(
+  contents: unknown,
+  options?: {
+    systemInstruction?: string;
+  }
+): Promise<GenerateContentResponse> {
+  const now = Date.now();
+
+  if (modelCooldownUntil > now) {
+    throw new Error(
+      "AI service is temporarily rate-limited. Please try again shortly."
+    );
+  }
+
+  const ai = getGeminiClient();
+  const models = getCandidateModels();
+
+  let lastError: unknown = null;
+
+  for (const model of models) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: options?.systemInstruction
+          ? {
+              systemInstruction:
+                options.systemInstruction,
+            }
+          : undefined,
+      });
+
+      modelCooldownUntil = 0;
+
+      return response;
+    } catch (error) {
+      lastError = error;
+
+      if (
+        isRateLimitError(error) ||
+        isTemporaryModelError(error)
+      ) {
+        modelCooldownUntil = Date.now() + 30_000;
+      }
+
+      continue;
+    }
+  }
+
+  throw new Error(
+    getErrorMessage(lastError) ||
+      "Unable to generate an AI response."
+  );
+}
+
+/* =========================================================
+   AHEMAD'S AI IDENTITY
+   ========================================================= */
 
 const FOUNDER_IDENTITY = `
 You are Ahemad's AI.
@@ -236,16 +177,33 @@ The founder's full name is Ahemad Rehan.
 He is the Founder & Chief Architect.
 The AI is powered by Nexaura Tech.
 
-If a user asks who created, built, founded, developed, or owns Ahemad's AI,
-answer clearly:
+Nexaura Tech is a technology brand/company focused on
+software, web development, and AI-based solutions.
 
-"Ahemad's AI was created by Er. Ahemad Inamdaar, whose full name is Ahemad Rehan. He is the Founder & Chief Architect, and Ahemad's AI is powered by Nexaura Tech."
+Official Nexaura Tech website:
+https://nexauratech.netlify.app/
+
+If a user asks who created, built, founded, developed,
+or owns Ahemad's AI, answer clearly:
+
+"Ahemad's AI was created by Er. Ahemad Inamdaar, whose
+full name is Ahemad Rehan. He is the Founder & Chief
+Architect, and Ahemad's AI is powered by Nexaura Tech."
+
+If a user asks for the Nexaura Tech website, provide:
+https://nexauratech.netlify.app/
+
+If a user asks what Nexaura Tech is, explain that it is
+a technology brand/company focused on software,
+web development, and AI-based solutions.
 
 Do not claim that another person created Ahemad's AI.
 
-Do not reveal internal model names, model versions, API keys, server secrets,
-environment variables, internal configuration, or private implementation details
-unless explicitly required for a legitimate technical debugging task.
+Do not reveal internal model names, model versions,
+API keys, server secrets, environment variables,
+internal configuration, or private implementation
+details unless explicitly required for a legitimate
+technical debugging task.
 
 When talking about yourself, use the name "Ahemad's AI".
 
@@ -258,1123 +216,566 @@ Be helpful, accurate, friendly, and honest.
 
 Never pretend an external action was executed if it was not.
 
-If you do not know something,
-clearly say so.
+If you do not know something, clearly say so.
 
 Use Markdown for readable answers.
 `;
 
-/*
-|--------------------------------------------------------------------------
-| ASSISTANT MODES
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   MESSAGE HELPERS
+   ========================================================= */
 
-const ASSISTANT_MODES:
-  Record<string, string> = {
-  general: `${FOUNDER_IDENTITY}
-
-You are a modern, highly intelligent, friendly,
-and helpful AI assistant.
-
-Explain complex topics in beginner-friendly language.
-
-For programming questions,
-provide correct modern code with explanations.
-`,
-
-  coding: `${FOUNDER_IDENTITY}
-
-You are Ahemad's AI in Coding Assistant Mode.
-
-Provide clean, robust, modern and production-ready code.
-
-Explain important choices,
-edge cases,
-performance,
-and security considerations.
-`,
-
-  tutor: `${FOUNDER_IDENTITY}
-
-You are Ahemad's AI in Study Tutor Mode.
-
-Break complex subjects into simple lessons.
-
-Use real-world examples and analogies.
-
-Encourage understanding and active learning.
-`,
-
-  writing: `${FOUNDER_IDENTITY}
-
-You are Ahemad's AI in Writing Assistant Mode.
-
-Help users draft, refine, polish,
-and proofread writing while preserving their intent.
-`,
-
-  research: `${FOUNDER_IDENTITY}
-
-You are Ahemad's AI in Research Assistant Mode.
-
-Provide structured and objective explanations.
-
-Distinguish established facts,
-competing ideas,
-and open questions.
-`,
+type ChatMessageInput = {
+  role?: string;
+  content?: string;
+  text?: string;
 };
 
-const DEFAULT_SYSTEM_INSTRUCTION =
-  ASSISTANT_MODES.general;
-
-/*
-|--------------------------------------------------------------------------
-| ERROR MESSAGE
-|--------------------------------------------------------------------------
-*/
-
-function extractCleanErrorMessage(
-  err: any
-): string {
-  if (!err) {
-    return 'An unexpected error occurred.';
-  }
-
-  const msg =
-    typeof err === 'string'
-      ? err
-      : err?.message ||
-        String(err);
-
-  if (
-    msg.includes(
-      'RESOURCE_EXHAUSTED'
-    ) ||
-    msg.includes(
-      'Quota exceeded'
-    ) ||
-    msg.includes('429')
-  ) {
-    return "Ahemad's AI is temporarily busy. Please wait a moment and try again.";
-  }
-
-  if (
-    msg.includes(
-      'API key'
-    ) ||
-    msg.includes(
-      'API_KEY'
-    )
-  ) {
-    return "Ahemad's AI service configuration needs attention.";
-  }
-
-  if (
-    msg.includes(
-      'NOT_FOUND'
-    ) ||
-    msg.includes(
-      'not found'
-    )
-  ) {
-    return "The requested AI model or service is currently unavailable.";
-  }
-
+function getMessageText(message: ChatMessageInput): string {
   return (
-    msg ||
-    "Ahemad's AI could not generate a response. Please try again."
+    message.content?.trim() ||
+    message.text?.trim() ||
+    ""
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| FORMAT ATTACHMENTS
-|--------------------------------------------------------------------------
-*/
-
-function formatAttachmentParts(
-  attachments: any[]
-): any[] {
-  const parts: any[] = [];
-
-  if (!Array.isArray(attachments)) {
-    return parts;
-  }
-
-  for (const attachment of attachments) {
-    if (
-      attachment?.textContent
-    ) {
-      parts.push({
-        text: `[Attached Document: ${
-          attachment.name ||
-          'document'
-        }]\n${attachment.textContent}`,
-      });
-    } else if (
-      attachment?.data &&
-      attachment?.mimeType
-    ) {
-      parts.push({
-        inlineData: {
-          data:
-            attachment.data.replace(
-              /^data:[^;]+;base64,/,
-              ''
-            ),
-          mimeType:
-            attachment.mimeType,
-        },
-      });
-    }
-  }
-
-  return parts;
+function normalizeRole(role?: string): "user" | "model" {
+  return role === "model" || role === "assistant"
+    ? "model"
+    : "user";
 }
 
-/*
-|--------------------------------------------------------------------------
-| FORMAT GEMINI MESSAGES
-|--------------------------------------------------------------------------
-*/
-
-function formatMessages(
-  messages: any[]
+function buildGeminiContents(
+  messages: ChatMessageInput[]
 ) {
-  if (!Array.isArray(messages)) {
-    return [];
-  }
+  return messages
+    .map((message) => ({
+      role: normalizeRole(message.role),
+      parts: [
+        {
+          text: getMessageText(message),
+        },
+      ],
+    }))
+    .filter(
+      (message) =>
+        message.parts[0].text.length > 0
+    );
+}
 
-  return messages.map(
-    (message: any) => {
-      const role =
-        message.role ===
-          'assistant' ||
-        message.role === 'model'
-          ? 'model'
-          : 'user';
+/* =========================================================
+   HEALTH DATA
+   ========================================================= */
 
-      const parts: any[] = [];
+function getHealthStatus() {
+  return {
+    status: "ok",
+    appName: "Ahemad's AI",
+    model: "Ahemad's AI",
+    activeModel: "Ahemad's AI",
+    isRateLimited:
+      modelCooldownUntil > Date.now(),
+    hasApiKey:
+      Boolean(process.env.GEMINI_API_KEY?.trim()),
+  };
+                     }
+/* =========================================================
+   HEALTH ROUTES
+   ========================================================= */
 
-      const attachmentParts =
-        formatAttachmentParts(
-          message.attachments
-        );
+app.get("/api/health", (_req, res) => {
+  res.json(getHealthStatus());
+});
 
-      parts.push(
-        ...attachmentParts
+app.get("/health", (_req, res) => {
+  res.json(getHealthStatus());
+});
+
+/* =========================================================
+   CHAT ROUTE
+   ========================================================= */
+
+app.post("/api/chat", async (req, res) => {
+  try {
+    const body = req.body ?? {};
+
+    const content =
+      typeof body.content === "string"
+        ? body.content.trim()
+        : typeof body.text === "string"
+          ? body.text.trim()
+          : "";
+
+    const incomingMessages = Array.isArray(body.messages)
+      ? body.messages
+      : [];
+
+    if (!content && incomingMessages.length === 0) {
+      return res.status(400).send(
+        "Please provide a message."
       );
-
-      const text =
-        typeof message.text ===
-        'string'
-          ? message.text
-          : typeof message.content ===
-              'string'
-            ? message.content
-            : '';
-
-      if (text.trim()) {
-        parts.push({
-          text: text,
-        });
-      }
-
-      if (parts.length === 0) {
-        parts.push({
-          text: '',
-        });
-      }
-
-      return {
-        role,
-        parts,
-      };
     }
-  );
-}
 
-/*
-|--------------------------------------------------------------------------
-| SYSTEM INSTRUCTION
-|--------------------------------------------------------------------------
-*/
+    const messages: ChatMessageInput[] =
+      incomingMessages.length > 0
+        ? incomingMessages
+        : [
+            {
+              role: "user",
+              content,
+            },
+          ];
 
-function buildSystemInstruction(
-  customSystemInstruction?: string,
-  mode?: string
-): string {
-  const modeInstruction =
-    (mode &&
-      ASSISTANT_MODES[mode]) ||
-    DEFAULT_SYSTEM_INSTRUCTION;
-
-  if (
-    customSystemInstruction &&
-    typeof customSystemInstruction ===
-      'string' &&
-    customSystemInstruction.trim()
-  ) {
-    return `${FOUNDER_IDENTITY}
-
-${customSystemInstruction.trim()}
-
-Remember:
-
-- Your name is Ahemad's AI.
-- Creator: Er. Ahemad Inamdaar.
-- Full name: Ahemad Rehan.
-- Role: Founder & Chief Architect.
-- Powered by Nexaura Tech.
-`;
-  }
-
-  return modeInstruction;
-}
-
-/*
-|--------------------------------------------------------------------------
-| HEALTH
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-  '/api/health',
-  (
-    req: Request,
-    res: Response
-  ) => {
-    try {
-      const hasKey =
-        Boolean(
-          process.env.GEMINI_API_KEY &&
-            process.env.GEMINI_API_KEY !==
-              'MY_GEMINI_API_KEY'
-        );
-
-      const configured =
-        getModelName();
-
-      const candidates =
-        getOrderedCandidates();
-
-      res.json({
-        status: 'ok',
-
-        appName:
-          "Ahemad's AI",
-
-        model:
-          configured,
-
-        activeModel:
-          candidates[0] ||
-          configured,
-
-        isRateLimited:
-          isModelInCooldown(
-            configured
-          ),
-
-        hasApiKey:
-          hasKey,
-
-        port: PORT,
-      });
-    } catch (error: any) {
-      res.status(200).json({
-        status: 'ok',
-        appName:
-          "Ahemad's AI",
-        hasApiKey: Boolean(
-          process.env.GEMINI_API_KEY
-        ),
-        model:
-          'gemini-3.8-flash',
+    if (
+      incomingMessages.length > 0 &&
+      content &&
+      getMessageText(
+        incomingMessages[incomingMessages.length - 1]
+      ) !== content
+    ) {
+      messages.push({
+        role: "user",
+        content,
       });
     }
+
+    const contents = buildGeminiContents(messages);
+
+    if (contents.length === 0) {
+      return res.status(400).send(
+        "Please provide a valid message."
+      );
+    }
+
+    const response = await generateWithFallback(
+      contents,
+      {
+        systemInstruction: FOUNDER_IDENTITY,
+      }
+    );
+
+    const text =
+      typeof response.text === "string"
+        ? response.text
+        : "";
+
+    if (!text.trim()) {
+      return res.status(502).send(
+        "Ahemad's AI could not generate a response."
+      );
+    }
+
+    res.setHeader(
+      "Content-Type",
+      "text/plain; charset=utf-8"
+    );
+
+    res.setHeader(
+      "Cache-Control",
+      "no-cache, no-transform"
+    );
+
+    res.setHeader(
+      "X-Content-Type-Options",
+      "nosniff"
+    );
+
+    return res.send(text);
+  } catch (error) {
+    console.error("POST /api/chat error:", error);
+
+    if (isRateLimitError(error)) {
+      return res.status(429).send(
+        "Ahemad's AI is temporarily rate-limited. Please try again shortly."
+      );
+    }
+
+    return res.status(500).send(
+      "Ahemad's AI is temporarily unable to respond. Please try again."
+    );
   }
-);
+});
 
-app.get(
-  '/health',
-  (
-    req: Request,
-    res: Response
-  ) => {
-    res.status(200).json({
-      status: 'ok',
-      appName:
-        "Ahemad's AI",
-    });
-  }
-);
+/* =========================================================
+   STREAMING CHAT ROUTE — SSE
+   ========================================================= */
 
-/*
-|--------------------------------------------------------------------------
-| CHAT TITLE
-|--------------------------------------------------------------------------
-*/
+app.post("/api/chat/stream", async (req, res) => {
+  try {
+    const body = req.body ?? {};
 
-app.post(
-  '/api/chat/title',
-  async (
-    req: Request,
-    res: Response
-  ) => {
-    try {
-      const {
-        message,
-      } = req.body;
+    const content =
+      typeof body.content === "string"
+        ? body.content.trim()
+        : typeof body.text === "string"
+          ? body.text.trim()
+          : "";
 
-      if (
-        !message ||
-        typeof message !==
-          'string'
-      ) {
-        res.json({
-          title:
-            'New Conversation',
+    const incomingMessages = Array.isArray(body.messages)
+      ? body.messages
+      : [];
+
+    if (!content && incomingMessages.length === 0) {
+      return res.status(400).json({
+        error: "Please provide a message.",
+      });
+    }
+
+    const messages: ChatMessageInput[] =
+      incomingMessages.length > 0
+        ? [...incomingMessages]
+        : [
+            {
+              role: "user",
+              content,
+            },
+          ];
+
+    if (
+      incomingMessages.length > 0 &&
+      content &&
+      getMessageText(
+        incomingMessages[incomingMessages.length - 1]
+      ) !== content
+    ) {
+      messages.push({
+        role: "user",
+        content,
+      });
+    }
+
+    const contents = buildGeminiContents(messages);
+
+    if (contents.length === 0) {
+      return res.status(400).json({
+        error: "Please provide a valid message.",
+      });
+    }
+
+    const ai = getGeminiClient();
+    const models = getCandidateModels();
+
+    let streamResponse: AsyncIterable<GenerateContentResponse> | null =
+      null;
+
+    let lastError: unknown = null;
+
+    for (const model of models) {
+      try {
+        const result = await ai.models.generateContentStream({
+          model,
+          contents,
+          config: {
+            systemInstruction: FOUNDER_IDENTITY,
+          },
         });
 
-        return;
-      }
+        streamResponse = result;
+        break;
+      } catch (error) {
+        lastError = error;
 
-      const cleanMessage =
-        message
-          .trim()
-          .replace(
-            /^["']|["']$/g,
-            ''
-          );
-
-      const firstLine =
-        cleanMessage
-          .split('\n')[0]
-          .trim();
-
-      if (
-        firstLine.length > 0 &&
-        firstLine.length <= 35 &&
-        !firstLine.includes(
-          '{'
-        )
-      ) {
-        res.json({
-          title:
-            firstLine,
-        });
-
-        return;
-      }
-
-      const ai =
-        getGeminiClient();
-
-      for (const model of getOrderedCandidates()) {
-        try {
-          const result =
-            await ai.models.generateContent(
-              {
-                model,
-
-                contents:
-                  `Provide a short title (3-5 words, no quotes) for a chat beginning with: "${firstLine.slice(
-                    0,
-                    120
-                  )}"`,
-              }
-            );
-
-          if (result.text) {
-            res.json({
-              title:
-                result.text
-                  .trim()
-                  .replace(
-                    /^["'#*]+|["'#*]+$/g,
-                    ''
-                  )
-                  .slice(
-                    0,
-                    45
-                  ),
-            });
-
-            return;
-          }
-        } catch (error: any) {
-          markModelCooldown(
-            model,
-            error
-          );
+        if (
+          isRateLimitError(error) ||
+          isTemporaryModelError(error)
+        ) {
+          modelCooldownUntil =
+            Date.now() + 30_000;
         }
       }
+    }
 
-      res.json({
-        title:
-          firstLine
-            .split(/\s+/)
-            .slice(0, 5)
-            .join(' ') ||
-          'New Conversation',
-      });
-    } catch {
-      res.json({
-        title:
-          'New Conversation',
+    if (!streamResponse) {
+      throw (
+        lastError ||
+        new Error("Unable to start AI stream.")
+      );
+    }
+
+    res.status(200);
+    res.setHeader(
+      "Content-Type",
+      "text/event-stream; charset=utf-8"
+    );
+    res.setHeader(
+      "Cache-Control",
+      "no-cache, no-transform"
+    );
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader(
+      "X-Accel-Buffering",
+      "no"
+    );
+
+    for await (const chunk of streamResponse) {
+      const chunkText =
+        typeof chunk.text === "string"
+          ? chunk.text
+          : "";
+
+      if (!chunkText) continue;
+
+      res.write(
+        `data: ${JSON.stringify({
+          text: chunkText,
+        })}\n\n`
+      );
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } catch (error) {
+    console.error(
+      "POST /api/chat/stream error:",
+      error
+    );
+
+    if (!res.headersSent) {
+      return res.status(
+        isRateLimitError(error) ? 429 : 500
+      ).json({
+        error: isRateLimitError(error)
+          ? "Ahemad's AI is temporarily rate-limited. Please try again shortly."
+          : "Ahemad's AI is temporarily unable to respond.",
       });
     }
+
+    res.write(
+      `data: ${JSON.stringify({
+        error: "Ahemad's AI could not complete the response.",
+      })}\n\n`
+    );
+
+    res.end();
   }
-);
+});
 
-/*
-|--------------------------------------------------------------------------
-| MAIN CHAT API
-|--------------------------------------------------------------------------
-|
-| IMPORTANT:
-| App.tsx calls /api/chat.
-| This route returns PLAIN TEXT streaming,
-| not SSE, because App.tsx reads response.body
-| directly as text.
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   GENERATE ROUTE
+   ========================================================= */
 
-app.post(
-  '/api/chat',
-  async (
-    req: Request,
-    res: Response
-  ) => {
-    try {
-      const {
-        message,
-        messages,
-        attachments,
-        customSystemInstruction,
-        systemInstruction,
-        mode,
-      } = req.body;
+app.post("/api/chat/generate", async (req, res) => {
+  try {
+    const body = req.body ?? {};
 
-      if (
-        (!message ||
-          typeof message !==
-            'string') &&
-        (!Array.isArray(
-          messages
-        ) ||
-          messages.length === 0)
-      ) {
-        res.status(400).json({
-          error:
-            'Message is required.',
-        });
+    const content =
+      typeof body.content === "string"
+        ? body.content.trim()
+        : typeof body.text === "string"
+          ? body.text.trim()
+          : "";
 
-        return;
-      }
+    const incomingMessages = Array.isArray(body.messages)
+      ? body.messages
+      : [];
 
-      const ai =
-        getGeminiClient();
-
-      const history =
-        Array.isArray(messages)
-          ? formatMessages(
-              messages
-            )
+    const messages: ChatMessageInput[] =
+      incomingMessages.length > 0
+        ? [...incomingMessages]
+        : content
+          ? [
+              {
+                role: "user",
+                content,
+              },
+            ]
           : [];
 
-      /*
-       * Add current user message.
-       *
-       * App.tsx sends previous messages
-       * separately and current message in
-       * the "message" field.
-       */
-      const currentParts: any[] =
-        formatAttachmentParts(
-          Array.isArray(
-            attachments
-          )
-            ? attachments
-            : []
-        );
-
-      if (
-        typeof message ===
-          'string' &&
-        message.trim()
-      ) {
-        currentParts.push({
-          text: message.trim(),
-        });
-      }
-
-      if (
-        currentParts.length > 0
-      ) {
-        history.push({
-          role: 'user',
-          parts: currentParts,
-        });
-      }
-
-      const finalSystemInstruction =
-        buildSystemInstruction(
-          customSystemInstruction ||
-            systemInstruction,
-          mode
-        );
-
-      let streamResponse:
-        | AsyncIterable<GenerateContentResponse>
-        | null = null;
-
-      let usedModel = '';
-
-      let lastError:
-        | any = null;
-
-      for (const model of getOrderedCandidates()) {
-        try {
-          streamResponse =
-            await ai.models.generateContentStream(
-              {
-                model,
-
-                contents:
-                  history,
-
-                config: {
-                  systemInstruction:
-                    finalSystemInstruction,
-                },
-              }
-            );
-
-          usedModel = model;
-
-          break;
-        } catch (error: any) {
-          lastError =
-            error;
-
-          console.error(
-            `Model ${model} failed:`,
-            error
-          );
-
-          markModelCooldown(
-            model,
-            error
-          );
-        }
-      }
-
-      if (!streamResponse) {
-        throw (
-          lastError ||
-          new Error(
-            'All AI service candidates are unavailable.'
-          )
-        );
-      }
-
-      /*
-       * Plain text streaming.
-       */
-      res.status(200);
-
-      res.setHeader(
-        'Content-Type',
-        'text/plain; charset=utf-8'
-      );
-
-      res.setHeader(
-        'Cache-Control',
-        'no-cache, no-transform'
-      );
-
-      res.setHeader(
-        'Connection',
-        'keep-alive'
-      );
-
-      res.flushHeaders?.();
-
-      for await (const chunk of streamResponse) {
-        const textChunk =
-          (
-            chunk as GenerateContentResponse
-          ).text;
-
-        if (
-          textChunk &&
-          !res.writableEnded
-        ) {
-          res.write(
-            textChunk
-          );
-        }
-      }
-
-      console.log(
-        `Chat completed using model: ${usedModel}`
-      );
-
-      if (!res.writableEnded) {
-        res.end();
-      }
-    } catch (error: any) {
-      console.error(
-        'MAIN CHAT ERROR:',
-        error
-      );
-
-      const errorMessage =
-        extractCleanErrorMessage(
-          error
-        );
-
-      if (
-        !res.headersSent
-      ) {
-        res.status(500).json({
-          error:
-            errorMessage,
-        });
-      } else if (
-        !res.writableEnded
-      ) {
-        res.end();
-      }
-    }
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| STREAMING CHAT API
-|--------------------------------------------------------------------------
-|
-| Kept for future frontend usage.
-| This endpoint uses SSE.
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-  '/api/chat/stream',
-  async (
-    req: Request,
-    res: Response
-  ) => {
-    res.setHeader(
-      'Content-Type',
-      'text/event-stream'
-    );
-
-    res.setHeader(
-      'Cache-Control',
-      'no-cache, no-transform'
-    );
-
-    res.setHeader(
-      'Connection',
-      'keep-alive'
-    );
-
-    res.flushHeaders?.();
-
-    let isAborted =
-      false;
-
-    res.on(
-      'close',
-      () => {
-        if (
-          !res.writableEnded
-        ) {
-          isAborted =
-            true;
-        }
-      }
-    );
-
-    try {
-      const {
-        messages,
-        customSystemInstruction,
-        systemInstruction,
-        mode,
-      } = req.body;
-
-      if (
-        !Array.isArray(
-          messages
-        ) ||
-        messages.length === 0
-      ) {
-        res.write(
-          `data: ${JSON.stringify(
-            {
-              error:
-                'Messages array is required.',
-            }
-          )}\n\n`
-        );
-
-        res.end();
-
-        return;
-      }
-
-      const ai =
-        getGeminiClient();
-
-      const formattedContents =
-        formatMessages(
-          messages
-        );
-
-      const finalSystemInstruction =
-        buildSystemInstruction(
-          customSystemInstruction ||
-            systemInstruction,
-          mode
-        );
-
-      let streamResponse:
-        | AsyncIterable<GenerateContentResponse>
-        | null = null;
-
-      let usedModel = '';
-
-      let lastError:
-        | any = null;
-
-      for (const model of getOrderedCandidates()) {
-        try {
-          streamResponse =
-            await ai.models.generateContentStream(
-              {
-                model,
-
-                contents:
-                  formattedContents,
-
-                config: {
-                  systemInstruction:
-                    finalSystemInstruction,
-                },
-              }
-            );
-
-          usedModel = model;
-
-          break;
-        } catch (error: any) {
-          lastError =
-            error;
-
-          markModelCooldown(
-            model,
-            error
-          );
-        }
-      }
-
-      if (!streamResponse) {
-        throw (
-          lastError ||
-          new Error(
-            'All AI service candidates are unavailable.'
-          )
-        );
-      }
-
-      for await (const chunk of streamResponse) {
-        if (
-          isAborted
-        ) {
-          break;
-        }
-
-        const textChunk =
-          (
-            chunk as GenerateContentResponse
-          ).text;
-
-        if (textChunk) {
-          res.write(
-            `data: ${JSON.stringify(
-              {
-                chunk:
-                  textChunk,
-              }
-            )}\n\n`
-          );
-        }
-      }
-
-      if (
-        !isAborted
-      ) {
-        res.write(
-          `data: ${JSON.stringify(
-            {
-              done: true,
-              model:
-                usedModel,
-            }
-          )}\n\n`
-        );
-      }
-
-      res.end();
-    } catch (error: any) {
-      if (
-        !isAborted
-      ) {
-        res.write(
-          `data: ${JSON.stringify(
-            {
-              error:
-                extractCleanErrorMessage(
-                  error
-                ),
-            }
-          )}\n\n`
-        );
-
-        res.end();
-      }
-    }
-  }
-);
-
-/*
-|--------------------------------------------------------------------------
-| NORMAL CHAT GENERATION
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-  '/api/chat/generate',
-  async (
-    req: Request,
-    res: Response
-  ) => {
-    try {
-      const {
-        messages,
-        customSystemInstruction,
-        systemInstruction,
-        mode,
-      } = req.body;
-
-      if (
-        !Array.isArray(
-          messages
-        ) ||
-        messages.length === 0
-      ) {
-        res.status(400).json({
-          error:
-            'Messages array is required.',
-        });
-
-        return;
-      }
-
-      const ai =
-        getGeminiClient();
-
-      const formattedContents =
-        formatMessages(
-          messages
-        );
-
-      const finalSystemInstruction =
-        buildSystemInstruction(
-          customSystemInstruction ||
-            systemInstruction,
-          mode
-        );
-
-      let response:
-        | GenerateContentResponse
-        | null = null;
-
-      let usedModel = '';
-
-      let lastError:
-        | any = null;
-
-      for (const model of getOrderedCandidates()) {
-        try {
-          response =
-            await ai.models.generateContent(
-              {
-                model,
-
-                contents:
-                  formattedContents,
-
-                config: {
-                  systemInstruction:
-                    finalSystemInstruction,
-                },
-              }
-            );
-
-          usedModel = model;
-
-          break;
-        } catch (error: any) {
-          lastError =
-            error;
-
-          markModelCooldown(
-            model,
-            error
-          );
-        }
-      }
-
-      if (!response) {
-        throw (
-          lastError ||
-          new Error(
-            'All AI service candidates are unavailable.'
-          )
-        );
-      }
-
-      res.json({
-        text:
-          response.text ||
-          '',
-
-        model:
-          usedModel,
-      });
-    } catch (error: any) {
-      console.error(
-        'CHAT GENERATE ERROR:',
-        error
-      );
-
-      res.status(500).json({
-        error:
-          extractCleanErrorMessage(
-            error
-          ),
+    if (
+      incomingMessages.length > 0 &&
+      content &&
+      getMessageText(
+        incomingMessages[incomingMessages.length - 1]
+      ) !== content
+    ) {
+      messages.push({
+        role: "user",
+        content,
       });
     }
-  }
-);
 
-/*
-|--------------------------------------------------------------------------
-| 404 API HANDLER
-|--------------------------------------------------------------------------
-*/
+    if (messages.length === 0) {
+      return res.status(400).json({
+        error: "Please provide a message.",
+      });
+    }
 
-app.use(
-  '/api',
-  (
-    req: Request,
-    res: Response
-  ) => {
-    res.status(404).json({
-      error:
-        `API route not found: ${req.method} ${req.path}`,
+    const contents = buildGeminiContents(messages);
+
+    if (contents.length === 0) {
+      return res.status(400).json({
+        error: "Please provide a valid message.",
+      });
+    }
+
+    const response = await generateWithFallback(
+      contents,
+      {
+        systemInstruction: FOUNDER_IDENTITY,
+      }
+    );
+
+    const text =
+      typeof response.text === "string"
+        ? response.text
+        : "";
+
+    return res.json({
+      text,
+      content: text,
+      model: "Ahemad's AI",
+    });
+  } catch (error) {
+    console.error(
+      "POST /api/chat/generate error:",
+      error
+    );
+
+    return res.status(
+      isRateLimitError(error) ? 429 : 500
+    ).json({
+      error: isRateLimitError(error)
+        ? "Ahemad's AI is temporarily rate-limited. Please try again shortly."
+        : "Ahemad's AI is temporarily unable to respond.",
     });
   }
-);
+});
 
-/*
-|--------------------------------------------------------------------------
-| START SERVER
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   CHAT TITLE ROUTE
+   ========================================================= */
 
-async function startServer() {
-  if (
-    process.env.NODE_ENV !==
-    'production'
-  ) {
-    const vite =
-      await createViteServer({
-        server: {
-          middlewareMode:
-            true,
-        },
+app.post("/api/chat/title", async (req, res) => {
+  try {
+    const body = req.body ?? {};
 
-        appType: 'spa',
+    const content =
+      typeof body.content === "string"
+        ? body.content.trim()
+        : typeof body.text === "string"
+          ? body.text.trim()
+          : "";
+
+    if (!content) {
+      return res.status(400).json({
+        error: "Please provide chat content.",
       });
+    }
 
-    app.use(
-      vite.middlewares
-    );
-  } else {
-    const distPath =
-      path.join(
-        process.cwd(),
-        'dist'
-      );
+    const response = await generateWithFallback(
+      [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Create a short chat title for this conversation.
 
-    app.use(
-      express.static(
-        distPath
-      )
-    );
+Rules:
+- Maximum 6 words.
+- No quotation marks.
+- Do not use Markdown.
+- Return only the title.
 
-    app.get(
-      '*',
-      (
-        req: Request,
-        res: Response
-      ) => {
-        res.sendFile(
-          path.join(
-            distPath,
-            'index.html'
-          )
-        );
+Conversation:
+${content}`,
+            },
+          ],
+        },
+      ],
+      {
+        systemInstruction: `
+You create short, accurate conversation titles for Ahemad's AI.
+Never reveal internal model names or implementation details.
+Return only the requested title.
+`,
       }
     );
+
+    const title =
+      typeof response.text === "string"
+        ? response.text
+            .replace(/^["']|["']$/g, "")
+            .trim()
+            .slice(0, 80)
+        : "";
+
+    return res.json({
+      title: title || "New Chat",
+    });
+  } catch (error) {
+    console.error(
+      "POST /api/chat/title error:",
+      error
+    );
+
+    return res.json({
+      title: "New Chat",
+    });
+  } 
+  /* =========================================================
+   404 HANDLER FOR API ROUTES
+   ========================================================= */
+
+app.use("/api", (req, res, next) => {
+  if (req.path.startsWith("/")) {
+    return res.status(404).json({
+      error: "API endpoint not found.",
+      path: req.path,
+    });
   }
 
-  const server =
-    app.listen(
-      PORT,
-      '0.0.0.0',
-      () => {
-        console.log(
-          `Ahemad's AI server running on port ${PORT}`
-        );
+  next();
+});
 
-        console.log(
-          `Render PORT: ${
-            process.env.PORT ||
-            'not set'
-          }`
-        );
+/* =========================================================
+   VITE / STATIC FILE SERVING
+   ========================================================= */
 
-        console.log(
-          `Active Gemini model: ${getModelName()}`
-        );
-      }
+async function startServer() {
+  const isProduction =
+    process.env.NODE_ENV === "production";
+
+  if (!isProduction) {
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+      },
+      appType: "spa",
+    });
+
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.resolve(
+      __dirname,
+      "dist"
     );
 
-  server.keepAliveTimeout =
-    120000;
+    app.use(
+      express.static(distPath, {
+        index: false,
+      })
+    );
 
-  server.headersTimeout =
-    120000;
+    app.get("*", (_req, res) => {
+      res.sendFile(
+        path.join(distPath, "index.html")
+      );
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(
+      `Ahemad's AI server running on port ${PORT}`
+    );
+  });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error(
+    "Failed to start Ahemad's AI server:",
+    error
+  );
+
+  process.exit(1);
+});
+});
