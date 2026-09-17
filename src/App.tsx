@@ -18,7 +18,7 @@ import {
   storage,
 } from "./utils/storage";
 
-import Sidebar from "./components/Sidebar";
+import { Sidebar } from "./components/Sidebar";
 import Header from "./components/Header";
 import ChatMessage from "./components/ChatMessage";
 import ChatInput from "./components/ChatInput";
