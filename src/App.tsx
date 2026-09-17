@@ -1390,5 +1390,3 @@ useEffect(() => {
     </div>
   );
 }
-
-export default App;
