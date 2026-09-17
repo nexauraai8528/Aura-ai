@@ -22,7 +22,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import ChatMessage from "./components/ChatMessage";
 import ChatInput from "./components/ChatInput";
-import WelcomeScreen from "./components/WelcomeScreen";
+import { WelcomeScreen } from "./components/WelcomeScreen";
 import SettingsModal from "./components/SettingsModal";
 
 
