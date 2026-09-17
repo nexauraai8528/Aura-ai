@@ -1,232 +1,334 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  Send,
-  Square,
-  Paperclip,
-  X,
-  Mic,
-  MicOff,
-} from 'lucide-react';
-import { Attachment } from '../types';
+import React, {
+  ChangeEvent,
+  DragEvent,
+  KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { Attachment } from "../types";
 
 interface ChatInputProps {
-  onSendMessage: (text: string, attachments: Attachment[]) => void;
+  value?: string;
+  onChange?: (value: string) => void;
+
+  onSendMessage: (
+    text: string,
+    attachments: Attachment[]
+  ) => void;
+
   onStopGeneration?: () => void;
+
   isLoading: boolean;
+
   disabled?: boolean;
+
   initialText?: string;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({
+export const ChatInput: React.FC<
+  ChatInputProps
+> = ({
+  value,
+  onChange,
   onSendMessage,
   onStopGeneration,
   isLoading,
-  disabled,
-  initialText = '',
+  disabled = false,
+  initialText = "",
 }) => {
-  const [input, setInput] = useState(initialText);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isListening, setIsListening] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [internalInput, setInternalInput] =
+    useState(initialText);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const [attachments, setAttachments] =
+    useState<Attachment[]>([]);
 
-  // Sync initialText if provided
-  useEffect(() => {
-    if (initialText) {
-      setInput(initialText);
+  const [isDragging, setIsDragging] =
+    useState(false);
 
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
+  const [isListening, setIsListening] =
+    useState(false);
+
+  const textareaRef =
+    useRef<HTMLTextAreaElement | null>(
+      null
+    );
+
+  const fileInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
+
+  const recognitionRef =
+    useRef<any>(null);
+
+  const isControlled =
+    value !== undefined;
+
+  const input = isControlled
+    ? value
+    : internalInput;
+
+  const setInput = (nextValue: string) => {
+    if (!isControlled) {
+      setInternalInput(nextValue);
     }
-  }, [initialText]);
 
-  // Auto resize textarea
+    onChange?.(nextValue);
+  };
+
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(
-        textareaRef.current.scrollHeight,
-        200
-      )}px`;
+    if (
+      !isControlled &&
+      initialText
+    ) {
+      setInternalInput(initialText);
     }
+  }, [
+    initialText,
+    isControlled,
+  ]);
+
+  useEffect(() => {
+    const textarea =
+      textareaRef.current;
+
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+
+    const nextHeight = Math.min(
+      Math.max(
+        textarea.scrollHeight,
+        48
+      ),
+      180
+    );
+
+    textarea.style.height =
+      `${nextHeight}px`;
   }, [input]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-
-    if (isLoading) return;
-
-    const trimmed = input.trim();
-
-    if (!trimmed && attachments.length === 0) return;
-
-    onSendMessage(trimmed, attachments);
-
-    setInput('');
-    setAttachments([]);
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
-  };
-
-  // Enter = Send
-  // Shift + Enter = New Line
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>
-  ) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
-
-  // Process selected/dropped files
-  const processFiles = (files: FileList | File[]) => {
-    Array.from(files).forEach((file) => {
-      // 10MB file-size limit
-      if (file.size > 10 * 1024 * 1024) {
-        alert('File size exceeds 10MB limit.');
-        return;
+  const createAttachment =
+    async (
+      file: File
+    ): Promise<Attachment | null> => {
+      if (
+        file.size >
+        10 * 1024 * 1024
+      ) {
+        return null;
       }
 
-      const reader = new FileReader();
+      return new Promise(
+        (resolve) => {
+          const reader =
+            new FileReader();
 
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          const newAttachment: Attachment = {
-            id: `att-${Date.now()}-${Math.random()
-              .toString(36)
-              .substr(2, 5)}`,
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            data: reader.result,
-            mimeType:
-              file.type || 'application/octet-stream',
+          reader.onload = () => {
+            const result =
+              String(
+                reader.result || ""
+              );
+
+            resolve({
+              id: `${Date.now()}-${Math.random()
+                .toString(36)
+                .slice(2, 8)}`,
+              name: file.name,
+              mimeType:
+                file.type ||
+                "application/octet-stream",
+              size: file.size,
+              data: result,
+            } as Attachment);
           };
 
-          setAttachments((prev) => [
-            ...prev,
-            newAttachment,
-          ]);
+          reader.onerror = () =>
+            resolve(null);
+
+          reader.readAsDataURL(file);
         }
-      };
+      );
+    };
 
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+  const addFiles = async (
+    files: FileList | File[]
   ) => {
-    const files = e.target.files;
+    const fileArray =
+      Array.from(files);
 
-    if (!files || files.length === 0) return;
+    const created =
+      await Promise.all(
+        fileArray.map(
+          createAttachment
+        )
+      );
 
-    processFiles(files);
+    const valid =
+      created.filter(
+        Boolean
+      ) as Attachment[];
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (valid.length > 0) {
+      setAttachments(
+        (current) => [
+          ...current,
+          ...valid,
+        ]
+      );
     }
   };
 
-  // Drag & Drop
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
+  const handleFileChange = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    if (event.target.files) {
+      await addFiles(
+        event.target.files
+      );
+    }
+
+    event.target.value = "";
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDrop = async (
+    event: DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
 
     setIsDragging(false);
 
     if (
-      e.dataTransfer.files &&
-      e.dataTransfer.files.length > 0
+      event.dataTransfer.files.length
     ) {
-      processFiles(e.dataTransfer.files);
+      await addFiles(
+        event.dataTransfer.files
+      );
     }
   };
 
-  // Voice Dictation
-  const toggleVoiceInput = () => {
+  const handleSubmit = () => {
+    if (isLoading) {
+      onStopGeneration?.();
+      return;
+    }
+
+    if (disabled) return;
+
+    const trimmed =
+      input.trim();
+
+    if (
+      !trimmed &&
+      attachments.length === 0
+    ) {
+      return;
+    }
+
+    onSendMessage(
+      trimmed,
+      attachments
+    );
+
+    setInput("");
+    setAttachments([]);
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  };
+
+  const handleKeyDown = (
+    event: KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey
+    ) {
+      event.preventDefault();
+
+      if (!isLoading) {
+        handleSubmit();
+      }
+    }
+  };
+
+  const removeAttachment = (
+    id: string
+  ) => {
+    setAttachments(
+      (current) =>
+        current.filter(
+          (attachment) =>
+            attachment.id !== id
+        )
+    );
+  };
+
+  const startVoiceInput = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      (window as any)
+        .SpeechRecognition ||
+      (window as any)
+        .webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert(
-        'Speech recognition is not supported by your browser.'
-      );
       return;
     }
 
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-      return;
-    }
+    const recognition =
+      new SpeechRecognition();
 
-    try {
-      const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang =
+      navigator.language ||
+      "en-US";
 
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
 
-      recognition.onstart = () => {
-        setIsListening(true);
-      };
+    recognition.onresult = (
+      event: any
+    ) => {
+      let transcript = "";
 
-      recognition.onresult = (event: any) => {
-        const transcript =
-          event.results[0][0].transcript;
+      for (
+        let i = event.resultIndex;
+        i < event.results.length;
+        i++
+      ) {
+        transcript +=
+          event.results[i][0]
+            .transcript;
+      }
 
-        setInput((prev) =>
-          prev ? `${prev} ${transcript}` : transcript
-        );
-
-        setIsListening(false);
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err) {
-      console.error(
-        'Speech recognition error:',
-        err
+      setInput(
+        transcript
       );
+    };
 
+    recognition.onerror = () => {
       setIsListening(false);
-    }
-  };
+    };
 
-  const removeAttachment = (id: string) => {
-    setAttachments((prev) =>
-      prev.filter((a) => a.id !== id)
-    );
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current =
+      recognition;
+
+    recognition.start();
   };
 
   const canSubmit =
@@ -235,173 +337,208 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     !disabled;
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 pb-4">
-
-      {/* Attachments Preview */}
+    <div
+      className={`w-full rounded-2xl border bg-black/20 shadow-2xl backdrop-blur-xl transition-all ${
+        isDragging
+          ? "border-[var(--app-accent)]"
+          : "border-white/10"
+      }`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={() => {
+        setIsDragging(false);
+      }}
+      onDrop={handleDrop}
+    >
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2 p-2.5 bg-[#110F20]/90 backdrop-blur-md rounded-xl border border-purple-500/20">
-
-          {attachments.map((att) => (
-            <div
-              key={att.id}
-              className="relative group flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#211B3D] border border-purple-500/25 text-xs shadow-sm"
-            >
-              {att.mimeType.startsWith('image/') ? (
-                <img
-                  src={att.data}
-                  alt={att.name}
-                  className="w-7 h-7 object-cover rounded"
-                />
-              ) : (
-                <span className="font-mono text-purple-300">
-                  📄
-                </span>
-              )}
-
-              <span className="max-w-[130px] truncate font-medium text-zinc-100">
-                {att.name}
-              </span>
-
-              <button
-                type="button"
-                onClick={() =>
-                  removeAttachment(att.id)
-                }
-                className="p-0.5 rounded-full hover:bg-[#31205A] text-purple-300 hover:text-white cursor-pointer"
-                title="Remove attachment"
+        <div className="flex gap-2 overflow-x-auto border-b border-white/10 p-2">
+          {attachments.map(
+            (attachment) => (
+              <div
+                key={attachment.id}
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
+                <span className="max-w-[160px] truncate">
+                  {attachment.name}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    removeAttachment(
+                      attachment.id
+                    )
+                  }
+                  className="rounded-full px-1 text-white/60 hover:bg-white/10 hover:text-white"
+                  aria-label="Remove attachment"
+                >
+                  ×
+                </button>
+              </div>
+            )
+          )}
         </div>
       )}
 
-      {/* Main Input */}
-      <form
-        onSubmit={handleSubmit}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`relative flex flex-col bg-[#151329]/90 backdrop-blur-xl rounded-2xl border transition-all ${
-          isDragging
-            ? 'border-purple-300 bg-[#211B3D]/90 ring-2 ring-purple-400/30'
-            : 'border-purple-500/25 shadow-[0_8px_32px_rgba(20,12,45,0.55)] focus-within:border-purple-400/70 focus-within:shadow-[0_0_25px_rgba(139,92,246,0.18)]'
-        }`}
-      >
-
-        {/* Textarea */}
-        <textarea
-          id="chat-input-textarea"
-          ref={textareaRef}
-          value={input}
-          onChange={(e) =>
-            setInput(e.target.value)
+      <div className="flex items-end gap-2 p-2">
+        {/* ATTACHMENT */}
+        <button
+          type="button"
+          onClick={() =>
+            fileInputRef.current?.click()
           }
-          onKeyDown={handleKeyDown}
-          placeholder="Ask Ahemad's AI anything... (Shift + Enter for new line)"
-          rows={1}
-          disabled={disabled}
-          className="w-full bg-transparent px-4 pt-3.5 pb-2 text-[15px] leading-relaxed text-zinc-100 placeholder-zinc-500 outline-none resize-none max-h-52 min-h-[48px]"
+          disabled={disabled || isLoading}
+          className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white/60 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+          aria-label="Attach file"
+        >
+          <svg
+            width="21"
+            height="21"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+          </svg>
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          accept="image/*,.pdf,.txt,.md,.json,.js,.ts,.py"
+          onChange={handleFileChange}
         />
 
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+        {/* TEXTAREA */}
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(event) =>
+            setInput(
+              event.target.value
+            )
+          }
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          placeholder={
+            isLoading
+              ? "Ahemad's AI is responding..."
+              : "Message Ahemad's AI..."
+          }
+          rows={1}
+          className="min-h-[48px] max-h-[180px] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-3 text-[var(--chat-input-size)] leading-6 text-white outline-none placeholder:text-white/35"
+        />
 
-          {/* Left Tools */}
-          <div className="flex items-center gap-1">
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,.pdf,.txt,.md,.json,.js,.ts,.py"
-              multiple
-              className="hidden"
-              onChange={handleFileChange}
+        {/* VOICE */}
+        <button
+          type="button"
+          onClick={startVoiceInput}
+          disabled={disabled || isLoading}
+          className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+            isListening
+              ? "bg-[var(--app-accent)] text-white"
+              : "text-white/60 hover:bg-white/10 hover:text-white"
+          } disabled:opacity-40`}
+          aria-label="Voice input"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect
+              x="9"
+              y="2"
+              width="6"
+              height="13"
+              rx="3"
             />
+            <path d="M5 10a7 7 0 0014 0" />
+            <path d="M12 19v3" />
+            <path d="M8 22h8" />
+          </svg>
+        </button>
 
-            {/* Attach */}
-            <button
-              id="attach-file-btn"
-              type="button"
-              onClick={() =>
-                fileInputRef.current?.click()
-              }
-              className="flex items-center gap-1.5 p-2 rounded-xl text-purple-300 hover:text-white hover:bg-[#211B3D] transition-colors cursor-pointer text-xs font-medium"
-              title="Attach image or text document"
+        {/* SEND / STOP */}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={
+            !isLoading &&
+            !canSubmit
+          }
+          className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+            isLoading
+              ? "bg-red-500 text-white hover:bg-red-600"
+              : canSubmit
+                ? "bg-[var(--app-accent)] text-white hover:opacity-90"
+                : "bg-white/10 text-white/30"
+          }`}
+          aria-label={
+            isLoading
+              ? "Stop generating"
+              : "Send message"
+          }
+        >
+          {isLoading ? (
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="currentColor"
             >
-              <Paperclip className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                Attach
-              </span>
-            </button>
-
-            {/* Voice */}
-            <button
-              id="voice-dictate-btn"
-              type="button"
-              onClick={toggleVoiceInput}
-              className={`p-2 rounded-xl text-xs transition-colors cursor-pointer ${
-                isListening
-                  ? 'bg-amber-500/20 text-amber-300 animate-pulse border border-amber-500/40'
-                  : 'text-purple-300 hover:text-white hover:bg-[#211B3D]'
-              }`}
-              title={
-                isListening
-                  ? 'Stop listening'
-                  : 'Voice dictation'
-              }
+              <rect
+                x="6"
+                y="6"
+                width="12"
+                height="12"
+                rx="2"
+              />
+            </svg>
+          ) : (
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              {isListening ? (
-                <MicOff className="w-4 h-4" />
-              ) : (
-                <Mic className="w-4 h-4" />
-              )}
-            </button>
-          </div>
+              <path d="M22 2L11 13" />
+              <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+            </svg>
+          )}
+        </button>
+      </div>
 
-          {/* Send / Stop */}
-          <div className="flex items-center gap-2">
-
-            {isLoading ? (
-              <button
-                id="stop-generating-btn"
-                type="button"
-                onClick={onStopGeneration}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#211B3D] hover:bg-[#31205A] text-zinc-100 border border-purple-500/25 text-xs font-semibold hover:opacity-95 transition-all cursor-pointer shadow-sm"
-              >
-                <Square className="w-3.5 h-3.5 fill-current text-amber-300" />
-                <span>Stop</span>
-              </button>
-            ) : (
-              <button
-                id="send-message-btn"
-                type="submit"
-                disabled={!canSubmit}
-                className={`p-2 rounded-xl transition-all cursor-pointer ${
-                  canSubmit
-                    ? 'bg-gradient-to-r from-[#5B3FA7] to-[#4169E1] hover:from-[#6D4CC2] hover:to-[#4F7BFF] text-white border border-purple-300/30 shadow-md shadow-purple-950/40 hover:shadow-[0_0_18px_rgba(139,92,246,0.35)] active:scale-95'
-                    : 'bg-[#111022]/60 text-zinc-600 border border-purple-500/10 cursor-not-allowed'
-                }`}
-                title="Send message (Enter)"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </form>
-
-      {/* Footer */}
-      <div className="flex flex-col items-center justify-center gap-1 mt-2 text-[10px] tracking-wide text-zinc-500">
+      {/* SMALL FOOTER */}
+      <div className="flex items-center justify-between px-3 pb-2 text-[10px] text-white/30">
         <span>
-          Ahemad's AI can make mistakes. Verify important information.
+          Enter to send · Shift + Enter for new line
         </span>
 
-        <span className="text-purple-400/50">
-          Powered by Nexaura Tech
-        </span>
+        {isDragging && (
+          <span className="text-[var(--app-accent)]">
+            Drop file here
+          </span>
+        )}
       </div>
     </div>
   );
 };
+
+export default ChatInput;
