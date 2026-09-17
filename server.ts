@@ -1,15 +1,13 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
-import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import type { GenerateContentResponse } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = process.cwd();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -278,7 +276,8 @@ function getHealthStatus() {
     hasApiKey:
       Boolean(process.env.GEMINI_API_KEY?.trim()),
   };
-                     }
+}
+
 /* =========================================================
    HEALTH ROUTES
    ========================================================= */
@@ -711,8 +710,10 @@ Return only the requested title.
     return res.json({
       title: "New Chat",
     });
-  } 
-  /* =========================================================
+  }
+});
+
+/* =========================================================
    404 HANDLER FOR API ROUTES
    ========================================================= */
 
@@ -777,5 +778,4 @@ startServer().catch((error) => {
   );
 
   process.exit(1);
-});
 });
