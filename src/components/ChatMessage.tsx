@@ -160,9 +160,7 @@ export function ChatMessage({
             <div className="w-full max-w-2xl">
               <textarea
                 value={editText}
-                onChange={(event) =>
-                  setEditText(event.target.value)
-                }
+                onChange={(event) => setEditText(event.target.value)}
                 rows={4}
                 autoFocus
                 className="w-full resize-y rounded-2xl border border-violet-500/40 bg-zinc-900/90 px-4 py-3 text-sm text-zinc-100 outline-none ring-0 placeholder:text-zinc-600 focus:border-violet-500/70"
@@ -204,15 +202,21 @@ export function ChatMessage({
               >
                 {message.content ? (
                   isUser ? (
-                    <div className="whitespace-pre-wrap break-words text-[15px] leading-7">
+                    <div
+                      style={{
+                        fontSize: 'var(--chat-message-size)',
+                      }}
+                      className="whitespace-pre-wrap break-words leading-7"
+                    >
                       {message.content}
                     </div>
                   ) : (
                     <div
-                      className={`prose prose-invert max-w-none break-words text-[15px] leading-7 ${
-                        isError
-                          ? 'text-red-300'
-                          : 'text-zinc-200'
+                      style={{
+                        fontSize: 'var(--chat-message-size)',
+                      }}
+                      className={`prose prose-invert max-w-none break-words leading-7 ${
+                        isError ? 'text-red-300' : 'text-zinc-200'
                       }`}
                     >
                       <ReactMarkdown
@@ -232,8 +236,7 @@ export function ChatMessage({
                             children,
                             ...props
                           }) => {
-                            const inline =
-                              !className;
+                            const inline = !className;
 
                             if (inline) {
                               return (
@@ -315,7 +318,7 @@ export function ChatMessage({
                   </div>
                 )}
 
-              {/* Actions */}
+              {/* Assistant actions */}
               {!isUser && message.content && (
                 <div className="mt-2 flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                   <button
