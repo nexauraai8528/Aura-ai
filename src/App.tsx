@@ -1043,129 +1043,73 @@ useEffect(() => {
 // PART 2 ENDS HERE
 // ============================================================
 // ============================================================
-// PART 3 — MAIN UI / LAYOUT
+// PART 3 — COMPLETE CORRECTED UI + APP CLOSING
 // ============================================================
 
-return (
-  <div
-    className="
-      h-[100dvh]
-      w-full
-      overflow-hidden
-      bg-[var(--app-bg,#080812)]
-      text-white
-      flex
-      relative
-    "
-  >
-
-    {/* ======================================================
-        MOBILE SIDEBAR BACKDROP
-        ====================================================== */}
-
-    {sidebarOpen && (
-      <button
-        type="button"
-        aria-label="Close chat history"
-        onClick={() =>
-          setSidebarOpen(false)
-        }
-        className="
-          fixed
-          inset-0
-          z-40
-          bg-black/60
-          backdrop-blur-sm
-          md:hidden
-        "
-      />
-    )}
-
-
-    {/* ======================================================
-        SIDEBAR
-        ====================================================== */}
-
-    <Sidebar
-      conversations={conversations}
-      activeConversationId={activeId}
-
-      onSelectConversation={
-        handleSelectConversation
-      }
-
-      onNewChat={
-        handleNewChat
-      }
-
-      onDeleteConversation={
-        handleDeleteConversation
-      }
-
-      onRenameConversation={
-        handleRenameConversation
-      }
-
-      onTogglePinConversation={
-        handleTogglePin
-      }
-
-      onClearAll={
-        handleClearAll
-      }
-
-      theme={theme}
-
-      onToggleTheme={
-        handleToggleTheme
-      }
-
-      isOpen={
-        sidebarOpen
-      }
-
-      onCloseMobile={() =>
-        setSidebarOpen(false)
-      }
-
-      modelName="Ahemad's AI"
-
-      onOpenSettings={() =>
-        setIsSettingsOpen(true)
-      }
-    />
-
-
-    {/* ======================================================
-        MAIN AREA
-        ====================================================== */}
-
-    <main
+  return (
+    <div
       className="
-        flex-1
-        min-w-0
-        h-full
-        flex
-        flex-col
-        relative
+        h-[100dvh]
+        w-full
+        overflow-hidden
         bg-[var(--app-bg,#080812)]
+        text-white
+        flex
+        relative
       "
     >
 
+      {/* ======================================================
+          MOBILE SIDEBAR BACKDROP
+          ====================================================== */}
 
-      {/* ====================================================
-          HEADER
-          ==================================================== */}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close chat history"
+          onClick={() => setSidebarOpen(false)}
+          className="
+            fixed
+            inset-0
+            z-40
+            bg-black/60
+            backdrop-blur-sm
+            md:hidden
+          "
+        />
+      )}
 
-      <Header
-        onToggleSidebar={() =>
-          setSidebarOpen(
-            (previous) => !previous
-          )
+
+      {/* ======================================================
+          SIDEBAR
+          ====================================================== */}
+
+      <Sidebar
+        conversations={conversations}
+        activeConversationId={activeId}
+
+        onSelectConversation={
+          handleSelectConversation
         }
 
         onNewChat={
           handleNewChat
+        }
+
+        onDeleteConversation={
+          handleDeleteConversation
+        }
+
+        onRenameConversation={
+          handleRenameConversation
+        }
+
+        onTogglePinConversation={
+          handleTogglePin
+        }
+
+        onClearAll={
+          handleClearAll
         }
 
         theme={theme}
@@ -1174,221 +1118,289 @@ return (
           handleToggleTheme
         }
 
-        health={health}
-
-        activeChatTitle={
-          activeChatTitle
+        isOpen={
+          sidebarOpen
         }
+
+        onCloseMobile={() =>
+          setSidebarOpen(false)
+        }
+
+        modelName="Ahemad's AI"
 
         onOpenSettings={() =>
           setIsSettingsOpen(true)
         }
-
-        activeMode={
-          settings.activeMode
-        }
       />
 
 
-      {/* ====================================================
-          CHAT SCROLL AREA
-          ==================================================== */}
+      {/* ======================================================
+          MAIN CONTENT AREA
+          ====================================================== */}
 
-      <div
-        ref={chatScrollRef}
+      <main
         className="
           flex-1
-          min-h-0
-          overflow-y-auto
-          overscroll-contain
-          scroll-smooth
+          min-w-0
+          h-full
+          flex
+          flex-col
+          relative
+          bg-[var(--app-bg,#080812)]
         "
       >
 
-        {/* ================================================
-            WELCOME SCREEN
-            ================================================ */}
+        {/* ====================================================
+            HEADER
+            ==================================================== */}
 
-        {!currentConversation ||
-        currentConversation.messages.length === 0 ? (
-          <WelcomeScreen
-            onSelectPrompt={(prompt) => {
-              setInputDraft(prompt);
-            }}
+        <Header
+          onToggleSidebar={() =>
+            setSidebarOpen(
+              (previous) => !previous
+            )
+          }
 
-            activeMode={
-              settings.activeMode
-            }
-          />
-        ) : (
+          onNewChat={
+            handleNewChat
+          }
 
-          /* ==============================================
-             MESSAGE LIST
-             ============================================== */
+          theme={
+            theme
+          }
+
+          onToggleTheme={
+            handleToggleTheme
+          }
+
+          health={
+            health
+          }
+
+          activeChatTitle={
+            activeChatTitle
+          }
+
+          onOpenSettings={() =>
+            setIsSettingsOpen(true)
+          }
+
+          activeMode={
+            settings.activeMode
+          }
+        />
+
+
+        {/* ====================================================
+            CHAT AREA
+            ==================================================== */}
+
+        <div
+          ref={chatScrollRef}
+          className="
+            flex-1
+            min-h-0
+            overflow-y-auto
+            overscroll-contain
+            scroll-smooth
+          "
+        >
+
+          {/* ==================================================
+              WELCOME SCREEN
+              ================================================== */}
+
+          {!currentConversation ||
+          currentConversation.messages.length === 0 ? (
+
+            <WelcomeScreen
+              onSelectPrompt={(prompt) => {
+                setInputDraft(prompt);
+              }}
+
+              activeMode={
+                settings.activeMode
+              }
+            />
+
+          ) : (
+
+            /* =================================================
+               MESSAGE LIST
+               ================================================= */
+
+            <div
+              className="
+                w-full
+                max-w-4xl
+                mx-auto
+                px-3
+                sm:px-5
+                md:px-6
+                py-5
+                sm:py-8
+              "
+            >
+
+              {currentConversation.messages.map(
+                (message, index) => (
+                  <ChatMessage
+                    key={
+                      message.id
+                    }
+
+                    message={
+                      message
+                    }
+
+                    onRegenerate={
+                      message.role ===
+                      "assistant"
+                        ? handleRegenerate
+                        : undefined
+                    }
+
+                    onEdit={
+                      message.role ===
+                      "user"
+                        ? handleEditMessage
+                        : undefined
+                    }
+
+                    onDelete={
+                      handleDeleteMessage
+                    }
+
+                    isLast={
+                      index ===
+                      currentConversation.messages.length -
+                        1
+                    }
+
+                    isLoading={
+                      isLoading
+                    }
+                  />
+                )
+              )}
+
+            </div>
+          )}
+
+        </div>
+
+
+        {/* ====================================================
+            CHAT INPUT AREA
+            ==================================================== */}
+
+        <div
+          className="
+            shrink-0
+            w-full
+            border-t
+            border-white/5
+            bg-[var(--app-bg,#080812)]/95
+            backdrop-blur-xl
+            px-3
+            sm:px-5
+            pb-[max(0.75rem,env(safe-area-inset-bottom))]
+            pt-2
+          "
+        >
 
           <div
             className="
               w-full
               max-w-4xl
               mx-auto
-              px-3
-              sm:px-5
-              md:px-6
-              py-5
-              sm:py-8
             "
           >
 
-            {currentConversation.messages.map(
-              (message, index) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
+            <ChatInput
+              value={
+                inputDraft
+              }
 
-                  onRegenerate={
-                    message.role === "assistant"
-                      ? handleRegenerate
-                      : undefined
-                  }
+              onChange={
+                setInputDraft
+              }
 
-                  onEdit={
-                    message.role === "user"
-                      ? handleEditMessage
-                      : undefined
-                  }
+              onSend={
+                handleSendMessage
+              }
 
-                  onDelete={
-                    handleDeleteMessage
-                  }
+              onStop={
+                handleStopGenerating
+              }
 
-                  isLast={
-                    index ===
-                    currentConversation.messages.length -
-                      1
-                  }
+              isLoading={
+                isLoading
+              }
 
-                  isLoading={
-                    isLoading
-                  }
-                />
-              )
-            )}
+              enterToSend={
+                settings.enterToSend
+              }
+
+              activeMode={
+                settings.activeMode
+              }
+
+              onModeChange={(mode) =>
+                handleUpdateSettings({
+                  activeMode:
+                    mode,
+                })
+              }
+            />
 
           </div>
-        )}
-
-      </div>
-
-
-      {/* ====================================================
-          CHAT INPUT
-          ==================================================== */}
-
-      <div
-        className="
-          shrink-0
-          w-full
-          border-t
-          border-white/5
-          bg-[var(--app-bg,#080812)]/95
-          backdrop-blur-xl
-          px-3
-          sm:px-5
-          pb-[max(0.75rem,env(safe-area-inset-bottom))]
-          pt-2
-        "
-      >
-
-        <div
-          className="
-            w-full
-            max-w-4xl
-            mx-auto
-          "
-        >
-
-          <ChatInput
-            value={
-              inputDraft
-            }
-
-            onChange={
-              setInputDraft
-            }
-
-            onSend={
-              handleSendMessage
-            }
-
-            onStop={
-              handleStopGenerating
-            }
-
-            isLoading={
-              isLoading
-            }
-
-            enterToSend={
-              settings.enterToSend
-            }
-
-            activeMode={
-              settings.activeMode
-            }
-
-            onModeChange={(mode) =>
-              handleUpdateSettings({
-                activeMode:
-                  mode,
-              })
-            }
-          />
 
         </div>
 
-      </div>
-
-    </main>
+      </main>
 
 
-    {/* ======================================================
-        SETTINGS MODAL
-        ====================================================== */}
+      {/* ======================================================
+          SETTINGS MODAL
+          ====================================================== */}
 
-    <SettingsModal
-      isOpen={
-        isSettingsOpen
-      }
+      <SettingsModal
+        isOpen={
+          isSettingsOpen
+        }
 
-      onClose={() =>
-        setIsSettingsOpen(false)
-      }
+        onClose={() =>
+          setIsSettingsOpen(false)
+        }
 
-      settings={
-        settings
-      }
+        settings={
+          settings
+        }
 
-      onUpdateSettings={
-        handleUpdateSettings
-      }
+        onUpdateSettings={
+          handleUpdateSettings
+        }
 
-      onResetApp={
-        handleResetApp
-      }
+        onResetApp={
+          handleResetApp
+        }
 
-      onClearConversations={
-        handleClearAll
-      }
+        onClearConversations={
+          handleClearAll
+        }
 
-      health={
-        health
-      }
-    />
+        health={
+          health
+        }
+      />
 
-  </div>
-);
+    </div>
+  );
+}
 
 
 // ============================================================
-// PART 3 ENDS HERE
-// ============================================================
+// END OF APP.TSX
+// ============================================================             
+  
