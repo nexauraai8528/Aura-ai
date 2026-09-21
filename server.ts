@@ -10,6 +10,34 @@ dotenv.config();
 const __dirname = process.cwd();
 
 const app = express();
+
+/* =========================================================
+   CORS CONFIGURATION
+   ========================================================= */
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    "*"
+  );
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
 const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "20mb" }));
@@ -181,8 +209,8 @@ software, web development, and AI-based solutions.
 Official Nexaura Tech website:
 https://nexauratech.netlify.app/
 
-If a user asks who created, built, founded, developed,
-or owns Ahemad's AI, answer clearly:
+If a user asks who created, built, founded,
+developed, or owns Ahemad's AI, answer clearly:
 
 "Ahemad's AI was created by Er. Ahemad Inamdaar, whose
 full name is Ahemad Rehan. He is the Founder & Chief
@@ -492,15 +520,19 @@ app.post("/api/chat/stream", async (req, res) => {
     }
 
     res.status(200);
+
     res.setHeader(
       "Content-Type",
       "text/event-stream; charset=utf-8"
     );
+
     res.setHeader(
       "Cache-Control",
       "no-cache, no-transform"
     );
+
     res.setHeader("Connection", "keep-alive");
+
     res.setHeader(
       "X-Accel-Buffering",
       "no"
