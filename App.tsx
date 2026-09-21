@@ -411,8 +411,8 @@ export default function App() {
                 throw new Error(data.error);
               }
 
-              if (data.chunk) {
-                accumulatedText += data.chunk;
+              if (data.text) {
+                accumulatedText += data.text;
 
                 setConversations((prev) =>
                   prev.map((conv) => {
